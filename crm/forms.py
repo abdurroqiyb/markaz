@@ -125,8 +125,10 @@ class MonthField(forms.ChoiceField):
 
 
 class PaymentForm(StyledModelForm):
-    rows = [["amount", "month"], ["method", "date"]]
+    rows = [["amount", "month"], ["months", "method"], ["date"]]
     month = MonthField()
+    months = forms.IntegerField(label="Necha oy uchun (oldindan to'lov)", min_value=1, max_value=12, initial=1, required=False,
+                                help_text="2 va undan ko'p bo'lsa summa shu oydan boshlab oylarga teng bo'linadi")
 
     class Meta:
         model = Payment
@@ -144,6 +146,14 @@ class PaymentForm(StyledModelForm):
             ("" if s.status == "faol" else f" ({st[s.status].lower()})")
         self.fields["month"].choices = sv.month_options(month or self.initial.get("month"), back=2, fwd=1)
         self.fields["amount"].widget.attrs["min"] = "1"
+        self.fields["months"].widget.attrs["max"] = "12"
+
+    def clean_date(self):
+        d = self.cleaned_data["date"]
+        from .models import CashClose
+        if d and CashClose.objects.filter(date=d).exists():
+            raise forms.ValidationError("Bu kun kassasi yopilgan. Boshqa sana tanlang yoki direktor kassani qayta ochsin.")
+        return d
 
     def clean_amount(self):
         a = self.cleaned_data["amount"]
@@ -191,7 +201,8 @@ class CenterForm(StyledModelForm):
 
     class Meta:
         model = Center
-        fields = ["name", "director", "phone", "address", "referral_bonus", "public_form", "reminder_text"]
+        fields = ["name", "director", "phone", "address", "referral_bonus", "public_form", "parent_cabinet",
+                  "prorate_first_month", "reminder_text"]
 
 
 class PlanForm(StyledModelForm):
@@ -272,30 +283,81 @@ class ScriptForm(StyledModelForm):
         fields = ["title", "text"]
 
 
+TRANSLIT = {"o'": "o", "g'": "g", "o‘": "o", "g‘": "g", "sh": "sh", "ch": "ch", "'": "", "‘": "", "’": "", "`": "",
+            "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo", "ж": "j", "з": "z", "и": "i",
+            "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t",
+            "у": "u", "ф": "f", "х": "x", "ц": "s", "ч": "ch", "ш": "sh", "щ": "sh", "ъ": "", "ы": "i", "ь": "",
+            "э": "e", "ю": "yu", "я": "ya", "ў": "o", "қ": "q", "ғ": "g", "ҳ": "h"}
+
+
+def make_login(first, last=""):
+    """Ism-familiyadan bo'sh login: "Dilnoza Karimova" -> "dilnoza.karimova" (band bo'lsa raqam qo'shiladi)."""
+    import re as _re
+    def clean(x):
+        x = (x or "").strip().lower()
+        for k, v in TRANSLIT.items():
+            x = x.replace(k, v)
+        return _re.sub(r"[^a-z0-9]+", "", x)
+    base = ".".join(p for p in (clean(first), clean(last)) if p) or "xodim"
+    base, n, cand = base[:30], 1, base[:30]
+    while User.objects.filter(username__iexact=cand).exists():
+        n += 1
+        cand = f"{base}{n}"
+    return cand
+
+
+def make_code():
+    """Eslab qolish oson, lekin taxmin qilib bo'lmaydigan kirish kodi: masalan "kexa-4821"."""
+    import secrets
+    cons, vow = "bdfgkmnprstvxz", "aeiou"
+    word = "".join(secrets.choice(cons) + secrets.choice(vow) for _ in range(2))
+    return f"{word}-{secrets.randbelow(9000) + 1000}"
+
+
 class StaffCreateForm(StyledMixin, forms.Form):
     first_name = forms.CharField(label="Ism", max_length=150)
     last_name = forms.CharField(label="Familiya", max_length=150, required=False)
-    username = forms.CharField(label="Login", max_length=150)
-    password = forms.CharField(label="Parol", widget=forms.PasswordInput, min_length=8)
+    phone = forms.CharField(label="Telefon", max_length=50, required=False)
     role = forms.ChoiceField(label="Rol", choices=[c for c in Staff.ROLES], initial="oqituvchi")
+    username = forms.CharField(label="Login (bo'sh qoldirsangiz ismdan yasaladi)", max_length=150, required=False)
+    password = forms.CharField(label="Kod / parol (bo'sh qoldirsangiz avtomatik)", required=False,
+                               widget=forms.TextInput(attrs={"autocomplete": "new-password"}))
+    groups = forms.ModelMultipleChoiceField(label="Guruhlari (o'qituvchi uchun)", required=False,
+                                            queryset=Group.objects.none(), widget=forms.CheckboxSelectMultiple)
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
+        self.fields["groups"].queryset = Group.objects.order_by("name")
+        self.fields["groups"].label_from_instance = lambda g: g.name + (f" ({g.teacher})" if g.teacher else "")
         self._style()
 
     def clean_username(self):
         u = self.cleaned_data["username"].strip()
-        if User.objects.filter(username__iexact=u).exists():
+        if u and User.objects.filter(username__iexact=u).exists():
             raise forms.ValidationError("Bu login band")
         return u
 
-    def clean_password(self):
-        p = self.cleaned_data["password"]
-        validate_password(p)
-        return p
+    def clean(self):
+        cd = super().clean()
+        if self.errors:
+            return cd
+        if not cd.get("username"):
+            cd["username"] = make_login(cd.get("first_name"), cd.get("last_name"))
+        if cd.get("password"):
+            try:
+                validate_password(cd["password"], User(username=cd["username"], first_name=cd.get("first_name", "")))
+            except forms.ValidationError as e:
+                self.add_error("password", e)
+        else:
+            cd["password"] = make_code()
+        return cd
 
     def layout(self):
-        return [[self["first_name"], self["last_name"]], [self["username"], self["password"]], [self["role"]]]
+        rows = [[self["first_name"], self["last_name"]], [self["phone"], self["role"]],
+                [self["username"], self["password"]]]
+        if self.fields["groups"].queryset.exists():
+            rows.append([self["groups"]])
+        return rows
 
 
 class StaffEditForm(StyledMixin, forms.Form):
@@ -359,3 +421,22 @@ class ImportForm(StyledMixin, forms.Form):
 
     def layout(self):
         return [[self["kind"]], [self["file"]]]
+
+
+class TransferForm(StyledMixin, forms.Form):
+    group = forms.ModelChoiceField(label="Yangi guruh", queryset=Group.objects.none(), required=False,
+                                   empty_label="Guruhsiz")
+    date = forms.DateField(label="Qaysi sanadan", widget=forms.DateInput)
+    keep_discount = forms.BooleanField(label="Chegirma saqlansin", required=False, initial=True)
+
+    def __init__(self, *a, student=None, **kw):
+        super().__init__(*a, **kw)
+        qs = Group.objects.order_by("name")
+        if student and student.group_id:
+            qs = qs.exclude(pk=student.group_id)
+        self.fields["group"].queryset = qs
+        self.fields["group"].label_from_instance = lambda g: f"{g.name} · {sv.fmt(g.price)} so'm"
+        self._style()
+
+    def layout(self):
+        return [[self["group"], self["date"]], [self["keep_discount"]]]

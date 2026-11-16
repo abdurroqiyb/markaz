@@ -32,4 +32,17 @@
   </form>
   <p class="mut m0" style="font-size:13px;margin-top:8px">Server buyrug'i bilan ham bo'ladi: <code>python manage.py backup_db --file zaxira.json.gz</code> va <code>python manage.py restore_db zaxira.json.gz --yes</code>.</p>
 </section>
+<section class="panel" id="namuna"><h2>Namuna: markaz egasiga ko'rsatish uchun</h2>
+  {% if demo.on %}
+  <p class="mut">Namuna yuklangan: 6 oylik markaz (8 guruh, ~70 talaba, to'lovlar, qarzlar, davomat, imtihonlar, lidlar). Har bir rol bilan kirib, xodim nimani ko'rishini ko'rsating:</p>
+  <div class="mini"><span>Kirish manzili<br><small class="mut">{{ demo.url }}</small></span><span>Kod: <span class="codebox">{{ demo.code }}</span></span></div>
+  {% for u in demo.users %}<div class="mini"><span><b>{{ u.login }}</b><br><small class="mut">{{ u.name }}</small></span><span class="pill mute">{{ u.role }}</span></div>{% endfor %}
+  <p class="mut" style="font-size:13px">Ko'rsatib bo'lgach, "Namunani o'chirish" tugmasini bosing: namunaviy ma'lumot va demo loginlar o'chadi, haqiqiy ma'lumotlarga tegilmaydi.</p>
+  <form method="post" action="{% url 'unseed' %}" class="inl">{% csrf_token %}<button class="btn" data-confirm>Namunani o'chirish</button></form>
+  {% else %}
+  <p class="mut">Bir tugma bilan to'liq ishlagan markaz namunasi yuklanadi: 4 o'qituvchi, 8 guruh, ~70 talaba, 6 oylik to'lov, qarz, davomat, imtihon, lidlar, xarajatlar va har rol uchun demo login.</p>
+  <div class="banner warning">Namuna yuklangan paytda hisobotlarda haqiqiy ma'lumot bilan birga ko'rinadi. Eng yaxshisi: haqiqiy ma'lumot kiritishdan oldin ko'rsating yoki ko'rsatib bo'lgach darhol o'chiring.</div>
+  <form method="post" action="{% url 'seed' %}" class="inl">{% csrf_token %}<button class="btn primary">Namuna yuklash</button></form>
+  {% endif %}
+</section>
 {% endblock %}

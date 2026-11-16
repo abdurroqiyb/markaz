@@ -20,4 +20,13 @@ def crm(request):
         "is_director": director,
         "can_edit_students": not is_teacher_scoped(u),
         "db_warning": director and not getattr(settings, "DB_PERSISTENT", True),
+        "bell": _badge(u),
     }
+
+
+def _badge(u):
+    try:
+        from .notify import badge
+        return badge(u)
+    except Exception:  # bildirishnoma xatosi sahifani buzmasin
+        return 0

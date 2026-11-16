@@ -63,5 +63,12 @@ def ariza(request):
                                        source="Sayt (ariza)", status="yangi", next_contact=timezone.localdate(),
                                        note=cd.get("note", "").strip())
             ActivityLog.objects.create(user=None, text=f"Saytdan ariza: {lead.name} ({lead.phone})"[:300])
+            try:
+                from django.urls import reverse
+                from .notify import notify_users, staff_with
+                notify_users(staff_with("lidlar"), f"Saytdan yangi ariza: {lead.name} ({lead.phone})"
+                             + (f", {lead.course}" if lead.course else ""), reverse("lead_log", args=[lead.pk]))
+            except Exception:  # xabar yuborilmasa ham ariza saqlanadi
+                pass
             done = True
     return render(request, "crm/public_form.html", {"center": center, "form": form, "done": done})

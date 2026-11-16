@@ -1,0 +1,13 @@
+{% extends "crm/base.html" %}
+{% block title %}Bildirishnomalar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Bildirishnomalar</h1><p class="sub">Bugungi eslatmalar va sizga kelgan xabarlar</p></div>
+  <div class="tools">{% if tg_link %}<a class="btn primary" href="{{ tg_link }}" target="_blank" rel="noopener">Telegram'ga ulash</a>{% endif %}{% if rows %}<form method="post" action="{% url 'notify_clear' %}" class="inl">{% csrf_token %}<button class="btn">Tozalash</button></form>{% endif %}</div></div>
+{% if tg_on %}<div class="banner {% if tg_linked %}success{% else %}info{% endif %}">{% if tg_linked %}Telegram ulangan: eslatmalar va xabarlar Telegram'ga ham keladi (har kuni ertalab bugungi ishlar ro'yxati).{% else %}"Telegram'ga ulash" tugmasini bosing, bot ochilgach "Start"ni bosing: eslatmalar telefoningizga ham keladi.{% endif %}</div>{% endif %}
+<section class="panel"><h2>Bugungi eslatmalar</h2>
+  {% for x in rem %}<div class="mini"><span>{{ x.text }}</span><a class="btn sm" href="{{ x.url }}">Ochish</a></div>{% empty %}<p class="mut m0">Bugun shoshilinch ish yo'q.</p>{% endfor %}
+</section>
+<section class="panel"><h2>Xabarlar</h2>
+  {% for n in rows %}<div class="mini"><span>{% if n.fresh %}<span class="pill info">yangi</span> {% endif %}{{ n.text }}<br><small class="mut">{{ n.created_at|date:"d.m.Y H:i" }}</small></span>{% if n.url %}<a class="btn sm ghost" href="{{ n.url }}">Ochish</a>{% endif %}</div>{% empty %}<p class="mut m0">Xabar yo'q.</p>{% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Kassa{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Kunlik kassa</h1><p class="sub">Kun oxirida naqd pulni sanang va tizim bilan solishtiring</p></div>
+  <div class="tools"><a class="btn" href="{% url 'tolovlar' %}">To'lovlar</a></div></div>
+<div class="monthnav"><a class="btn sm" href="?d={{ prev|date:'Y-m-d' }}">&larr;</a><b>{{ day|date:"d.m.Y" }}{% if is_today %} · bugun{% endif %}</b><a class="btn sm" href="?d={{ next|date:'Y-m-d' }}">&rarr;</a>
+  <form method="get" class="inl"><input type="date" name="d" value="{{ day|date:'Y-m-d' }}" aria-label="Sana" onchange="this.form.submit()"></form></div>
+<div class="tiles">
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "wallet" %}</span>Naqd</div><div class="num">{{ t.Naqd|som }}<small>so'm</small></div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "wallet" %}</span>Karta</div><div class="num">{{ t.Karta|som }}<small>so'm</small></div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "wallet" %}</span>O'tkazma</div><div class="num">{% with x=t|get:"O'tkazma" %}{{ x|som }}{% endwith %}<small>so'm</small></div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "chart" %}</span>Jami</div><div class="num">{{ total|som }}<small>so'm</small></div><div class="hint">{{ rows|length }} ta to'lov</div></div>
+</div>
+<div class="cols">
+  <section class="panel">{% if closed %}<h2>Kassa yopilgan</h2>
+    <div class="mini"><span>Naqd: tizim {{ closed.cash_sys|som }} · sanaldi {{ closed.cash_real|som }}</span><span class="pill {% if closed.cash_diff %}bad{% else %}good{% endif %}">{% if closed.cash_diff %}farq {{ closed.cash_diff|som }}{% else %}to'g'ri{% endif %}</span></div>
+    <div class="mini"><span>Karta: tizim {{ closed.card_sys|som }} · terminal {{ closed.card_real|som }}</span><span class="pill {% if closed.card_diff %}bad{% else %}good{% endif %}">{% if closed.card_diff %}farq {{ closed.card_diff|som }}{% else %}to'g'ri{% endif %}</span></div>
+    {% if closed.note %}<p class="mut">Izoh: {{ closed.note }}</p>{% endif %}
+    <p class="mut m0" style="font-size:13px">Yopdi: {{ closed.user.get_full_name|default:closed.user.username }}, {{ closed.created_at|date:"d.m.Y H:i" }}. Bu kunga to'lov qo'shib bo'lmaydi.</p>
+    {% if admin %}<form method="post" action="{% url 'kassa_reopen' closed.pk %}" class="fbtns">{% csrf_token %}<button class="btn sm">Kassani qayta ochish</button></form>{% endif %}
+  {% else %}<h2>Kassani yopish</h2>
+    <form method="post" novalidate class="stack">{% csrf_token %}<input type="hidden" name="d" value="{{ day|date:'Y-m-d' }}">
+      {% for row in form.layout %}<div class="frow">{% for f in row %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endfor %}</div>{% endfor %}
+      <div class="fbtns"><button class="btn primary">Kassani yopish</button></div>
+    </form>
+    <p class="mut m0" style="font-size:13px">Tizimda: naqd {{ t.Naqd|som }}, karta {{ t.Karta|som }} so'm. Farq bo'lsa direktorga xabar boradi.</p>
+  {% endif %}</section>
+  <section class="panel"><h2>Shu kungi to'lovlar</h2>
+    {% for p in rows %}<div class="mini"><span>{{ p.student.name|default:"-" }}<br><small class="mut">{{ p.month|mlabel }} · {{ p.method }}{% if p.refund %} · qaytarish{% endif %}</small></span><span class="money">{{ p.amount|som }}</span></div>{% empty %}<p class="mut m0">Bu kunda to'lov yo'q.</p>{% endfor %}
+  </section>
+</div>
+<section class="panel"><h2>Oxirgi yopilishlar</h2>
+  {% for c in history %}<div class="mini"><span><a href="?d={{ c.date|date:'Y-m-d' }}">{{ c.date|date:"d.m.Y" }}</a><br><small class="mut">naqd {{ c.cash_real|som }} · karta {{ c.card_real|som }}{% if c.note %} · {{ c.note }}{% endif %}</small></span>{% if c.ok %}<span class="pill good">To'g'ri</span>{% else %}<span class="pill bad">Farq: {{ c.cash_diff|add:c.card_diff|som }}</span>{% endif %}</div>{% empty %}<p class="mut m0">Hali kassa yopilmagan.</p>{% endfor %}
+</section>
+{% endblock %}

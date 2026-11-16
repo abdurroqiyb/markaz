@@ -430,3 +430,12 @@ input.otp{font-size:22px;letter-spacing:.3em;text-align:center;font-variant-nume
 .scorerow input{width:90px;text-align:right;font-variant-numeric:tabular-nums}
 
 @media (min-width:820px){.side{gap:14px}.nav{overflow-y:auto;min-height:0;flex:1 1 auto;scrollbar-width:thin}.nav a{padding:7px 12px}}
+
+/* bildirishnoma qo'ng'iroqchasi, kirish ma'lumotlari kartasi */
+.bellbtn{position:relative}
+.bellnum{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10.5px;line-height:17px;text-align:center;font-weight:700}
+.credcard{border:2px solid var(--accent)}
+.credcard .kv b{overflow-wrap:anywhere}
+.ghist{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
+.codebox{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;letter-spacing:3px;font-weight:700}
+@media print{.credcard{border:1px solid #000}}

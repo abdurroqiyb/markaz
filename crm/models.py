@@ -36,6 +36,14 @@ class Center(models.Model):
         default="Assalomu alaykum! {markaz} dan yozyapmiz. {ism} uchun {oy} oyi to'lovi {summa} so'm "
                 "hali to'lanmagan. Iltimos, to'lovni amalga oshiring. Savollar bo'lsa: {telefon}. Rahmat!",
         help_text="O'zgaruvchilar: {ism} {summa} {oy} {guruh} {markaz} {telefon}")
+    prorate_first_month = models.BooleanField(
+        "Birinchi oy qisman hisoblansin", default=False,
+        help_text="Oy o'rtasida kelgan talaba birinchi oy uchun faqat qolgan darslar ulushini to'laydi")
+    parent_cabinet = models.BooleanField("Ota-ona kabineti yoqilgan", default=True)
+    tg_absent = models.BooleanField("Darsga kelmasa ota-onaga Telegram xabar", default=True)
+    tg_payment = models.BooleanField("To'lov qabul qilinganda ota-onaga Telegram xabar", default=True)
+    tg_staff_digest = models.BooleanField("Xodimlarga har kuni ertalab Telegram eslatma", default=True)
+    demo_code = models.CharField(max_length=20, blank=True, editable=False)
 
     class Meta:
         verbose_name = "Markaz ma'lumotlari"
@@ -64,6 +72,8 @@ class Staff(models.Model):
     sections = models.JSONField("Ochiq bo'limlar", default=list, blank=True)
     totp_secret = models.CharField("2FA kaliti", max_length=64, blank=True, editable=False)
     totp_enabled = models.BooleanField("Ikki bosqichli kirish yoqilgan", default=False)
+    tg_chat = models.CharField("Telegram chat", max_length=32, blank=True, editable=False)
+    tg_code = models.CharField(max_length=16, blank=True, editable=False)
 
     class Meta:
         verbose_name = "Xodim"
@@ -205,6 +215,7 @@ class Student(TimeStamped):
     referral_paid = models.BooleanField("Bonus berilgan", default=False)
     lead = models.ForeignKey(Lead, on_delete=models.SET_NULL, null=True, blank=True,
                              related_name="students", verbose_name="Qaysi liddan")
+    code = models.CharField("Ota-ona kodi", max_length=8, blank=True, db_index=True, editable=False)
 
     class Meta:
         verbose_name = "Talaba"
@@ -219,11 +230,26 @@ class Student(TimeStamped):
         return self.STATUS_CLS.get(self.status, "mute")
 
     def save(self, *args, **kwargs):
-        """Holat o'zgarsa tarixga yoziladi: qarz shu tarix bo'yicha hisoblanadi."""
-        old = None
+        """Holat va guruh o'zgarsa tarixga yoziladi: qarz shu tarix bo'yicha hisoblanadi."""
+        old, old_group = None, None
         if self.pk:
-            old = Student.objects.filter(pk=self.pk).values_list("status", flat=True).first()
+            row = Student.objects.filter(pk=self.pk).values_list("status", "group_id").first()
+            if row:
+                old, old_group = row
+        if not self.code:
+            self.code = new_student_code()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = list(kwargs["update_fields"]) + ["code"]
+        group_date = getattr(self, "_group_date", None)
         super().save(*args, **kwargs)
+        if old is None or old_group != self.group_id:
+            day = group_date or timezone.localdate()
+            if old is None:
+                day = self.join_date or day
+            elif not self.group_log.exists() and old_group:
+                GroupChange.objects.create(student=self, group_id=old_group, date=min(self.join_date or day, day))
+            if self.group_id or old is not None:
+                GroupChange.objects.create(student=self, group_id=self.group_id, date=day)
         if old != self.status:
             day = timezone.localdate()
             if old is None:
@@ -236,6 +262,31 @@ class Student(TimeStamped):
                     start = self.paused_at
                 StatusChange.objects.create(student=self, status=old, date=min(start, day))
             StatusChange.objects.create(student=self, status=self.status, date=day)
+
+
+def new_student_code():
+    import secrets
+    while True:
+        c = f"{secrets.randbelow(900000) + 100000}"
+        if not Student.objects.filter(code=c).exists():
+            return c
+
+
+class GroupChange(models.Model):
+    """Talaba qaysi sanadan qaysi guruhda o'qigani (guruh almashtirish tarixi)."""
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="group_log", verbose_name="Talaba")
+    group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+                              verbose_name="Guruh")
+    date = models.DateField("Sanadan")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Guruh o'zgarishi"
+        verbose_name_plural = "Guruhlar tarixi"
+        ordering = ["date", "id"]
+
+    def __str__(self):
+        return f"{self.student} · {self.date} · {self.group or 'guruhsiz'}"
 
 
 class StatusChange(models.Model):
@@ -411,6 +462,74 @@ class Script(TimeStamped):
 
     def __str__(self):
         return self.title
+
+
+# ---------------------------------------------------------------- kassa
+class CashClose(models.Model):
+    """Kunlik kassa yopilishi: tizimdagi summa va sanab chiqilgan haqiqiy summa."""
+    date = models.DateField("Sana", unique=True)
+    cash_sys = models.BigIntegerField("Naqd (tizim)", default=0)
+    card_sys = models.BigIntegerField("Karta (tizim)", default=0)
+    transfer_sys = models.BigIntegerField("O'tkazma (tizim)", default=0)
+    cash_real = models.BigIntegerField("Naqd (sanaldi)", default=0)
+    card_real = models.BigIntegerField("Karta (terminal)", default=0)
+    note = models.CharField("Izoh", max_length=300, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                             verbose_name="Kim yopdi")
+    created_at = models.DateTimeField("Yopilgan vaqt", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Kassa yopilishi"
+        verbose_name_plural = "Kassa yopilishlari"
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"Kassa {self.date}"
+
+    @property
+    def cash_diff(self):
+        return self.cash_real - self.cash_sys
+
+    @property
+    def card_diff(self):
+        return self.card_real - self.card_sys
+
+    @property
+    def ok(self):
+        return not self.cash_diff and not self.card_diff
+
+
+# ---------------------------------------------------------------- Telegram va bildirishnomalar
+class ParentChat(models.Model):
+    """Ota-onaning Telegram chati va farzandi (bitta chatga bir nechta farzand bo'lishi mumkin)."""
+    chat_id = models.CharField("Telegram chat", max_length=32, db_index=True)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="tg_chats", verbose_name="Talaba")
+    name = models.CharField("Telegram nomi", max_length=200, blank=True)
+    created_at = models.DateTimeField("Ulangan", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Ota-ona Telegram"
+        verbose_name_plural = "Ota-onalar Telegram"
+        unique_together = [("chat_id", "student")]
+
+    def __str__(self):
+        return f"{self.student} · {self.name or self.chat_id}"
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    text = models.CharField("Matn", max_length=300)
+    url = models.CharField(max_length=300, blank=True)
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Bildirishnoma"
+        verbose_name_plural = "Bildirishnomalar"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.text
 
 
 # ---------------------------------------------------------------- vazifalar, jurnal

@@ -11,7 +11,7 @@ from functools import cached_property
 from django.utils import timezone
 
 from .models import (AdSpend, Attendance, Center, Charge, Expense, Group, Lead,
-                     Lesson, Payment, Promo, StatusChange, Student)
+                     GroupChange, Lesson, Payment, Promo, StatusChange, Student)
 from .roles import is_teacher_scoped
 
 MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust",
@@ -43,6 +43,33 @@ def shift_month(k, n):
     y, m = map(int, k.split("-"))
     idx = y * 12 + (m - 1) + n
     return f"{idx // 12}-{idx % 12 + 1:02d}"
+
+
+def month_end(k):
+    y, m = map(int, k.split("-"))
+    return date(y + m // 12, m % 12 + 1, 1) - timedelta(days=1)
+
+
+def lesson_days(g, k, since=None):
+    """Guruhning k oyidagi dars kunlari (jadval bo'yicha); jadval bo'lmasa oyning barcha kunlari."""
+    days = parse_days(g.days) if g else []
+    y, m = map(int, k.split("-"))
+    d, end, out = date(y, m, 1), month_end(k), []
+    while d <= end:
+        if (not days or d.weekday() in days) and (since is None or d >= since):
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def prorate(full, g, join):
+    """Oy o'rtasida kelgan talaba uchun: qolgan darslar ulushi, 1000 so'mgacha yaxlitlangan."""
+    k = mkey(join)
+    total = len(lesson_days(g, k))
+    left = len(lesson_days(g, k, since=join))
+    if not total or left >= total:
+        return full
+    return int(round(full * left / total / 1000) * 1000)
 
 
 def valid_month(k, default=None):
@@ -230,6 +257,34 @@ class Data:
         return out
 
     @cached_property
+    def all_groups(self):
+        return {g.id: g for g in Group.objects.all()}
+
+    @cached_property
+    def group_log(self):
+        out = defaultdict(list)
+        for sid, d_, gid in GroupChange.objects.order_by("date", "id").values_list("student_id", "date", "group_id"):
+            out[sid].append((d_, gid))
+        return out
+
+    def group_on(self, s, m):
+        """Oy oxirida (joriy oy bo'lsa bugun) talaba qaysi guruhda bo'lgan."""
+        log = self.group_log.get(s.id)
+        if not log:
+            return self.group_map.get(s.group_id) or (self.all_groups.get(s.group_id) if s.group_id else None)
+        day = min(month_end(m), self.TODAY)
+        gid = log[0][1]
+        for d_, x in log:
+            if d_ > day:
+                break
+            gid = x
+        return self.all_groups.get(gid) if gid else None
+
+    def group_history(self, s):
+        """[(sana, guruh)] profil uchun."""
+        return [(d_, self.all_groups.get(gid) if gid else None) for d_, gid in self.group_log.get(s.id, [])]
+
+    @cached_property
     def status_log(self):
         """{student_id: [(date, status), ...]} sana bo'yicha."""
         out = defaultdict(list)
@@ -258,9 +313,7 @@ class Data:
 
     def billable(self, s, m):
         """Oy uchun to'lov olinadimi: oy oxirida (joriy oy bo'lsa bugun) talaba faol bo'lgan bo'lsa."""
-        y, mo = map(int, m.split("-"))
-        end = (date(y + mo // 12, mo % 12 + 1, 1) - timedelta(days=1))
-        return self.status_on(s, min(end, self.TODAY)) == "faol"
+        return self.status_on(s, min(month_end(m), self.TODAY)) == "faol"
 
     @cached_property
     def paid_map(self):
@@ -286,14 +339,19 @@ class Data:
     def charge_amt(self, s, m):
         if (s.id, m) in self.charges:
             return self.charges[(s.id, m)]
-        g = self.group_of(s)
-        return max(0, g.price - (s.discount or 0)) if g else 0
+        g = self.group_on(s, m)
+        if not g:
+            return 0
+        full = max(0, g.price - (s.discount or 0))
+        if self.center.prorate_first_month and s.join_date and mkey(s.join_date) == m:
+            return prorate(full, g, s.join_date)
+        return full
 
     def joined_after(self, s, m):
         return bool(s.join_date and mkey(s.join_date) > m)
 
     def debt_for(self, s, m):
-        if not self.group_of(s) or self.joined_after(s, m) or not self.billable(s, m):
+        if not self.group_on(s, m) or self.joined_after(s, m) or not self.billable(s, m):
             return 0
         return max(0, self.charge_amt(s, m) - self.paid_for(s, m))
 
@@ -320,7 +378,7 @@ class Data:
 
     def expected_for(self, m):
         return sum(self.charge_amt(s, m) for s in self.students
-                   if self.group_of(s) and not self.joined_after(s, m) and self.billable(s, m))
+                   if self.group_on(s, m) and not self.joined_after(s, m) and self.billable(s, m))
 
     def income(self, m):
         return sum(p.amount for p in self.payments if p.month == m)

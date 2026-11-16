@@ -3,14 +3,20 @@
 {% block title %}Xodimlar{% endblock %}
 {% block content %}
 <div class="head"><div><h1>Xodimlar va kirish huquqlari</h1><p class="sub">Har bir xodim o'z login va paroli bilan kiradi va faqat o'ziga ochilgan bo'limlarni ko'radi</p></div><div class="tools"><a class="btn" href="{% url 'kabinet' %}">O'qituvchi kabinetlari</a><a class="btn" href="{% url 'admin:index' %}">Admin panel</a></div></div>
+{% if cred %}<section class="panel credcard" id="cred"><h2>Kirish ma'lumotlari: {{ cred.name }}</h2>
+  <div class="kv"><div><span>Manzil</span><b>{{ cred.url }}</b></div><div><span>Login</span><b>{{ cred.username }}</b></div><div><span>Kod</span><b class="tnum">{{ cred.password }}</b></div><div><span>Rol</span><b>{{ cred.role }}</b></div></div>
+  <textarea id="credtext" hidden>{{ cred.text }}</textarea>
+  <div class="fbtns"><button type="button" class="btn primary" data-copy="#credtext">Nusxalash</button><a class="btn" href="{{ cred.tg }}" target="_blank" rel="noopener">Telegram orqali yuborish</a><button type="button" class="btn" onclick="window.print()">Chop etish</button></div>
+  <p class="mut m0" style="font-size:13px">Bu kod faqat hozir ko'rinadi. Yo'qotilsa, "Yangi kod" tugmasi bilan yangisini yarating.</p>
+</section>{% endif %}
 <div class="cols">
   <section class="panel"><h2>Xodim qo'shish</h2>
     <form method="post" novalidate class="stack">{% csrf_token %}
       {% if form.non_field_errors %}<div class="banner error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
-      {% for row in form.layout %}<div class="frow">{% for f in row %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endfor %}</div>{% endfor %}
+      {% for row in form.layout %}<div class="frow">{% for f in row %}{% if f.name == "groups" %}<fieldset class="secgrid"><legend>{{ f.label }}</legend>{% for c in f %}<label class="secopt">{{ c.tag }}<span>{{ c.choice_label }}</span></label>{% endfor %}</fieldset>{% else %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endif %}{% endfor %}</div>{% endfor %}
       <div class="fbtns"><button class="btn primary">Qo'shish</button></div>
     </form>
-    <p class="mut m0" style="font-size:13px;margin-top:10px">Qo'shgandan keyin login va parolni xodimga bering. U birinchi kirishda parolini o'zi almashtirishi mumkin (chap pastdagi "Parol" tugmasi).</p>
+    <p class="mut m0" style="font-size:13px;margin-top:10px">Faqat ism va rolni yozing: login va kod avtomatik yaratiladi. O'qituvchi uchun guruhlarini belgilasangiz, u kirganda faqat shu guruhlarni ko'radi. Kirish ma'lumotlarini Telegram orqali bir tugma bilan yuborasiz.</p>
   </section>
   <section class="panel"><h2>Rollar (standart bo'limlar)</h2>
     <div class="mini"><span><b>Direktor</b><br><small class="mut">Hamma narsa: pul, xarajat, hisobot, jurnal, xodimlar, zaxira.</small></span></div>
@@ -29,6 +35,7 @@
       <form method="post" action="{% url 'staff_role' r.u.pk %}" class="inl" data-autosubmit>{% csrf_token %}<select class="pillsel" name="role" aria-label="Rol">{% for k, t in roles %}<option value="{{ k }}"{% if r.role == k %} selected{% endif %}>{{ t }}</option>{% endfor %}</select><noscript><button class="btn sm">OK</button></noscript></form>
       {% if r.role == "oqituvchi" %}<a class="btn sm ghost" href="{% url 'kabinet' %}?t={{ r.u.pk }}">Kabinet</a>{% endif %}
       <a class="btn sm" href="{% url 'staff_edit' r.u.pk %}">Huquq va parol</a>
+      <form method="post" action="{% url 'staff_newcode' r.u.pk %}" class="inl" onsubmit="return confirm('Yangi kod yaratilsinmi? Eski kod ishlamay qoladi.')">{% csrf_token %}<button class="btn sm ghost">Yangi kod</button></form>
       {% if not r.me %}{% url 'staff_remove' r.u.pk as du %}{% include "crm/_del.html" with del_url=du del_label="Bloklash" %}{% endif %}
     {% endif %}</span></div>{% endfor %}
 </section>

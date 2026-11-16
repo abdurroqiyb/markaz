@@ -1,6 +1,8 @@
+from django.contrib.auth.decorators import login_required
 from django.urls import path
 
-from . import exams
+from . import cash, exams, notify
+from . import telegram as tg
 from . import views as v
 
 urlpatterns = [
@@ -86,4 +88,13 @@ urlpatterns = [
     path("xodimlar/<int:pk>/ochirish/", v.staff_remove, name="staff_remove"),
     path("jurnal/", v.jurnal, name="jurnal"),
     path("qidiruv/", v.qidiruv, name="qidiruv"),
+    path("kassa/", cash.kassa, name="kassa"),
+    path("kassa/<int:pk>/ochish/", cash.kassa_reopen, name="kassa_reopen"),
+    path("bildirishnomalar/", notify.bildirishnomalar, name="bildirishnomalar"),
+    path("bildirishnomalar/tozalash/", notify.clear, name="notify_clear"),
+    path("telegram/", login_required(tg.settings_page), name="tg_settings"),
+    path("tolovlar/telegram/", v.debt_telegram, name="debt_telegram"),
+    path("xodimlar/<int:pk>/yangi-kod/", v.staff_newcode, name="staff_newcode"),
+    path("talabalar/<int:pk>/otkazish/", v.student_transfer, name="student_transfer"),
+    path("talabalar/<int:pk>/yangi-kod/", v.student_newcode, name="student_newcode"),
 ]
