@@ -29,6 +29,9 @@ def ensure_secret_key():
     key = os.environ.get("SECRET_KEY") or os.environ.get("DJANGO_SECRET_KEY")
     if key:
         return key
+    if env_bool("RENDER"):
+        print("DIQQAT: SECRET_KEY muhitda yo'q. Render -> Environment ga SECRET_KEY qo'shing, aks holda "
+              "har qayta ishga tushishda hamma tizimdan chiqib ketadi.", file=__import__("sys").stderr)
     key = secrets.token_urlsafe(50)
     try:
         with open(ENV_FILE, "a", encoding="utf-8") as fh:
@@ -157,6 +160,8 @@ STORAGES = {
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CSRF_FAILURE_VIEW = "crm.errors.csrf_failure"
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
