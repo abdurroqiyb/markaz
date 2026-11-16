@@ -163,3 +163,19 @@ class SecurityHeadersMiddleware:
         if request.user.is_authenticated if hasattr(request, "user") else False:
             response.setdefault("Cache-Control", "no-store, private")
         return response
+
+
+# ---------------------------------------------------------------- login katta-kichik harfga qaramaydi
+from django.contrib.auth.backends import ModelBackend  # noqa: E402
+
+
+class CaseInsensitiveBackend(ModelBackend):
+    """Telefonda login katta harf bilan yozilib qolsa ham kiradi ("Dilnoza.Karimova" = "dilnoza.karimova")."""
+
+    def authenticate(self, request, username=None, password=None, **kw):
+        if username:
+            from django.contrib.auth import get_user_model
+            u = get_user_model().objects.filter(username__iexact=username.strip()).order_by("id").first()
+            if u:
+                username = u.username
+        return super().authenticate(request, username=username, password=password, **kw)

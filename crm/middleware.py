@@ -16,4 +16,6 @@ class DailyBackupMiddleware:
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated and request.method == "GET":
             ensure_daily_backup()
+            from .telegram import ensure_daily_digest
+            ensure_daily_digest()
         return response

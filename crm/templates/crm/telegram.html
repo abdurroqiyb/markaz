@@ -1,0 +1,40 @@
+{% extends "crm/base.html" %}
+{% block title %}Telegram bot{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Telegram bot</h1><p class="sub">Ota-onalarga davomat, to'lov va qarz xabarlari, xodimlarga eslatmalar</p></div></div>
+{% if not on %}<section class="panel"><h2>1-qadam: bot yarating</h2>
+  <ol class="steps">
+    <li>Telegram'da <b>@BotFather</b> ni oching, <b>/newbot</b> yozing, botga nom bering (masalan: "{{ center.name }} bot").</li>
+    <li>BotFather bergan <b>token</b>ni nusxalang. Uni hech kimga, shu jumladan chatga ham yubormang.</li>
+    <li>Render'da: <b>Dashboard → markaz servisi → Environment → Add Environment Variable</b>. Nomi: <code>TELEGRAM_BOT_TOKEN</code>, qiymati: token. Saqlang (servis qayta ishga tushadi).</li>
+    <li>Shu sahifaga qaytib, "Botni ulash" tugmasini bosing.</li>
+  </ol>
+  <p class="mut m0" style="font-size:13px">Zaxira uchun Telegram bot allaqachon sozlangan bo'lsa (BACKUP_TELEGRAM_BOT_TOKEN), o'sha bot ham ishlaydi.</p>
+</section>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="lbl">Bot</div><div class="num" style="font-size:18px">{% if bot %}@{{ bot }}{% else %}?{% endif %}</div><div class="hint">{% if hooked %}ulangan{% else %}hali ulanmagan{% endif %}</div></div>
+  <div class="tile"><div class="lbl">Ota-onalar</div><div class="num">{{ linked }}<small>/ {{ total }}</small></div><div class="hint">faol talabadan ulangan</div></div>
+  <div class="tile"><div class="lbl">Xodimlar</div><div class="num">{{ staff_linked }}</div><div class="hint">eslatma oladi</div></div>
+</div>
+<div class="cols">
+<section class="panel"><h2>Ulanish</h2>
+  {% if hook_error %}<div class="banner error">Telegram xatosi: {{ hook_error }}</div>{% endif %}
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="connect"><button class="btn primary">{% if hooked %}Qayta ulash{% else %}Botni ulash{% endif %}</button></form>
+  <h3>Ota-ona qanday ulanadi?</h3>
+  <p class="mut">Talaba profilida "Ota-onaga yuborish" tugmasi bor: u havola va kodni Telegram orqali yuboradi. Ota-ona havolani bosib "Start"ni bossa, farzandiga ulanadi. Yoki botga 6 xonali kodni o'zi yozib yuboradi. Ota-ona botga <b>/holat</b> yozsa, farzandining davomati, uy vazifasi va qarzini ko'radi.</p>
+  <h3>Xodim qanday ulanadi?</h3>
+  <p class="mut m0">Har bir xodim qo'ng'iroqcha (bildirishnomalar) sahifasida "Telegram'ga ulash" tugmasini bosadi.</p>
+</section>
+<section class="panel"><h2>Qaysi xabarlar yuborilsin</h2>
+  <form method="post" class="stack">{% csrf_token %}
+    {% for f in form %}<label class="chkline">{{ f }} {{ f.label }}</label>{% endfor %}
+    <div class="fbtns"><button class="btn">Saqlash</button></div></form>
+  <p class="mut m0" style="font-size:13px">Qarz eslatmasi To'lovlar sahifasidagi "Telegram orqali eslatish" tugmasi bilan yuboriladi.</p>
+</section>
+</div>
+<section class="panel"><h2>Oxirgi ulangan ota-onalar</h2>
+  {% for c in chats %}<div class="mini"><span>{{ c.student.name }}<br><small class="mut">{{ c.name|default:"Telegram" }} · {{ c.created_at|date:"d.m.Y" }}</small></span></div>{% empty %}<p class="mut m0">Hali hech kim ulanmagan.</p>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}

@@ -478,3 +478,115 @@ class StatusHistoryTest(Base):
 
     def test_api_debt_bad_input(self):
         self.assertEqual(self.client.get(reverse("api_debt") + "?student=abc").status_code, 200)
+
+
+class NewFeaturesTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.g = Group.objects.create(name="A", price=300000, days="Du-Chor-Ju", time="10:00-11:30")
+        self.s = Student.objects.create(name="Vali", group=self.g, parent="+998 90 111 22 33",
+                                        join_date=date(2020, 1, 1))
+
+    def test_student_gets_parent_code(self):
+        self.assertRegex(self.s.code, r"^\d{6}$")
+
+    def test_staff_auto_login_and_code(self):
+        r = self.client.post(reverse("xodimlar"), {"first_name": "Dilnoza", "last_name": "Karimova",
+                                                   "role": "oqituvchi", "groups": [self.g.pk]})
+        self.assertEqual(r.status_code, 302)
+        u = User.objects.get(username="dilnoza.karimova")
+        self.g.refresh_from_db()
+        self.assertEqual(self.g.teacher_user, u)
+        r = self.client.get(reverse("xodimlar"))
+        self.assertContains(r, "dilnoza.karimova")
+        code = self.client.session.get("new_cred") or {}
+        # kod sahifada bir marta ko'rinadi va u bilan (katta harfli login bilan ham) kirish mumkin
+        import re
+        m = re.search(r'<b class="tnum">([^<]+)</b>', r.content.decode())
+        self.client.logout()
+        self.assertTrue(self.client.login(username="Dilnoza.Karimova", password=m.group(1)))
+
+    def test_parent_cabinet(self):
+        self.client.logout()
+        r = self.client.post(reverse("parent_login"), {"phone": "90 111 22 33", "code": "000000"})
+        self.assertContains(r, "Telefon yoki kod")
+        r = self.client.post(reverse("parent_login"), {"phone": "+998901112233", "code": self.s.code})
+        self.assertRedirects(r, reverse("parent_home"))
+        self.assertContains(self.client.get(reverse("parent_home")), "Vali")
+
+    def test_advance_payment_splits_months(self):
+        now = sv.now_month()
+        self.client.post(reverse("payment_add"), {"student": self.s.pk, "amount": 900000, "month": now,
+                                                  "months": 3, "method": "Naqd", "date": sv.today().isoformat()})
+        self.assertEqual(sorted(Payment.objects.values_list("month", "amount")),
+                         [(now, 300000), (sv.shift_month(now, 1), 300000), (sv.shift_month(now, 2), 300000)])
+
+    def test_prorate_first_month(self):
+        from .models import Center
+        c = Center.get()
+        c.prorate_first_month = True
+        c.save()
+        s = Student.objects.create(name="Yangi", group=self.g, join_date=date(2026, 11, 16))  # dushanba
+        d = sv.Data()
+        amt = d.charge_amt(s, "2026-11")
+        self.assertTrue(0 < amt < 300000)
+        self.assertEqual(d.charge_amt(s, "2026-12"), 300000)
+
+    def test_transfer_keeps_old_price_for_old_months(self):
+        g2 = Group.objects.create(name="B", price=500000)
+        m_old = sv.shift_month(sv.now_month(), -2)
+        r = self.client.post(reverse("student_transfer", args=[self.s.pk]),
+                             {"group": g2.pk, "date": sv.today().isoformat(), "keep_discount": "on"})
+        self.assertEqual(r.status_code, 302)
+        d = sv.Data()
+        self.s.refresh_from_db()
+        self.assertEqual(d.charge_amt(self.s, m_old), 300000)
+        self.assertEqual(d.charge_amt(self.s, sv.now_month()), 500000)
+        self.assertEqual(len(d.group_history(self.s)), 2)
+
+    def test_cash_close_blocks_payments(self):
+        from .models import CashClose
+        r = self.client.post(reverse("kassa"), {"d": sv.today().isoformat(), "cash_real": 0, "card_real": 0})
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(CashClose.objects.filter(date=sv.today()).exists())
+        r = self.client.post(reverse("payment_add"), {"student": self.s.pk, "amount": 1000, "month": sv.now_month(),
+                                                      "method": "Naqd", "date": sv.today().isoformat()})
+        self.assertEqual(r.status_code, 200)  # forma xato bilan qaytadi
+        self.assertFalse(Payment.objects.exists())
+
+    def test_notifications_on_task(self):
+        from .models import Notification
+        other = User.objects.create_user("ali", password="Kuchli-parol-123")
+        self.client.post(reverse("task_add"), {"title": "Qo'ng'iroq", "assignee": other.pk})
+        self.assertEqual(Notification.objects.filter(user=other).count(), 1)
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("bildirishnomalar")).status_code, 200)
+
+    def test_telegram_link_and_absent(self):
+        import os
+        from unittest import mock
+        from . import telegram as tg
+        from .models import ParentChat
+        sent = []
+        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "x", "TG_SYNC": "1"}), \
+                mock.patch.object(tg, "api", side_effect=lambda m, **p: sent.append((m, p)) or {}):
+            tg.handle({"message": {"chat": {"id": 77}, "text": f"/start {self.s.code}", "from": {"first_name": "Ona"}}})
+            self.assertTrue(ParentChat.objects.filter(chat_id="77", student=self.s).exists())
+            sent.clear()
+            self.client.post(reverse("davomat"), {"g": self.g.pk, "d": sv.today().isoformat(),
+                                                  f"s{self.s.pk}": "kelmadi"})
+            self.assertTrue(any("kelmadi" in p.get("text", "") for _, p in sent))
+            r = self.client.post(reverse("tg_hook", args=[tg.hook_secret()]), data="{}",
+                                 content_type="application/json")
+            self.assertEqual(r.status_code, 403)  # sarlavhadagi maxfiy kalitsiz
+
+    def test_demo_seed_and_delete(self):
+        from .management.commands.seed_demo import create_demo, delete_demo
+        real = Student.objects.count()
+        create_demo()
+        self.assertTrue(User.objects.filter(username="demo.admin").exists())
+        for name in ["dashboard", "tolovlar", "hisobotlar", "kassa", "zaxira", "imtihon"]:
+            self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
+        delete_demo()
+        self.assertEqual(Student.objects.count(), real)
+        self.assertFalse(User.objects.filter(username__startswith="demo.").exists())

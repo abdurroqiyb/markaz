@@ -20,11 +20,12 @@ from django.views.decorators.http import require_POST
 
 from . import services as sv
 from . import backup as bk
+from . import telegram as tg
 from .forms import (AdForm, CenterForm, ExpenseForm, GradeForm, GroupForm, ImportForm,
                     LeadCallForm, LeadForm, PaymentForm, PlanForm, PromoForm, RefundForm,
                     ResetPasswordForm, RestoreForm, ScriptForm, StaffCreateForm, StaffEditForm,
                     StudentForm, TaskForm)
-from .models import (ActivityLog, AdSpend, Attendance, Backup, Center, Charge, Expense, Grade, Group,
+from .models import (ActivityLog, AdSpend, Attendance, Backup, CashClose, Center, Charge, Expense, Grade, Group,
                      Lead, LeadCall, Lesson, Payment, Promo, Script, Staff, Student, Task)
 from .roles import (ROLES, SECTION_LABELS, allowed, can_money, director_required, home_section,
                     is_director, is_teacher_scoped, money_required, role_of, sections_of, section_required)
@@ -331,7 +332,59 @@ def student_profile(request, pk):
         "marks": marks[-24:], "grades": list(reversed(grades))[:6], "grade_spark": [x.pct for x in grades[-10:]],
         "avg": avg, "risk": risk if s.status == "faol" and risk["sc"] >= 25 else None,
         "payments": s.payments.all()[:8],
+        "ghist": d.group_history(s), "shist": [(dt, dict(Student.STATUSES).get(st, st)) for dt, st in d.timeline(s)],
+        "parent_box": parent_box(request, s) if not is_teacher_scoped(request.user) else None,
     })
+
+
+def parent_box(request, s):
+    """Ota-onaga yuboriladigan kod, kabinet havolasi va Telegram bot havolasi."""
+    from urllib.parse import quote
+    c = Center.get()
+    cab = request.build_absolute_uri(reverse("parent_login")) if c.parent_cabinet else ""
+    bot = tg.deep_link(s.code) if tg.enabled() else ""
+    lines = [f"Assalomu alaykum! {c.name}: {s.name} natijalarini kuzatib borish uchun."]
+    if cab:
+        lines.append(f"Ota-ona kabineti: {cab}\nTelefon: markazga yozilgan raqamingiz, kod: {s.code}")
+    if bot:
+        lines.append(f"Telegram orqali xabar olish: {bot}")
+    text = "\n".join(lines)
+    return {"code": s.code, "cab": cab, "bot": bot, "text": text, "linked": s.tg_chats.count(),
+            "share": "https://t.me/share/url?url=%20&text=" + quote(text)}
+
+
+@section_required("talabalar")
+@not_teacher
+def student_transfer(request, pk):
+    """Talabani boshqa guruhga o'tkazish: sana bilan tarixga yoziladi, qarz eski oylarda eski guruh narxida."""
+    from .forms import TransferForm
+    s = get_object_or_404(Student, pk=pk)
+    form = TransferForm(request.POST or None, initial={"date": sv.today()}, student=s)
+    if request.method == "POST" and form.is_valid():
+        old = s.group
+        s.group = form.cleaned_data["group"]
+        s._group_date = form.cleaned_data["date"]
+        if form.cleaned_data.get("keep_discount") is False:
+            s.discount = 0
+        s.save()
+        log(request, f"Talaba o'tkazildi: {s.name} · {old or 'guruhsiz'} -> {s.group or 'guruhsiz'}")
+        messages.success(request, f"{s.name} {s.group or 'guruhsiz'} ga o'tkazildi")
+        return redirect("student_profile", pk=s.pk)
+    return form_page(request, form, f"Boshqa guruhga o'tkazish: {s.name}", reverse("student_profile", args=[s.pk]))
+
+
+@section_required("talabalar")
+@not_teacher
+@require_POST
+def student_newcode(request, pk):
+    from .models import ParentChat, new_student_code
+    s = get_object_or_404(Student, pk=pk)
+    s.code = new_student_code()
+    s.save(update_fields=["code"])
+    ParentChat.objects.filter(student=s).delete()
+    log(request, f"Ota-ona kodi yangilandi: {s.name}")
+    messages.success(request, "Yangi kod yaratildi. Eski kod va Telegram ulanishi o'chirildi.")
+    return redirect("student_profile", pk=s.pk)
 
 
 @section_required("talabalar")
@@ -481,11 +534,19 @@ def davomat(request):
                 messages.success(request, "Mavzu saqlandi")
             else:
                 valid = dict(ATT)
+                before = dict(lesson.marks.values_list("student_id", "status"))
+                changed = {}
                 for s in studs:
                     v = "keldi" if action == "all" else request.POST.get(f"s{s.pk}")
                     if v in valid:
                         Attendance.objects.update_or_create(lesson=lesson, student=s, defaults={"status": v})
+                        if before.get(s.pk) != v:
+                            changed[s] = v
                 messages.success(request, "Davomat saqlandi")
+                if day == sv.today():
+                    n = tg.notify_absent(lesson, changed)
+                    if n:
+                        messages.info(request, f"Kelmaganlar ota-onasiga Telegram xabar yuborildi ({n})")
         log(request, f"Davomat: {g.name} · {day}")
         return redirect(url)
 
@@ -534,7 +595,7 @@ def tolovlar(request):
         "rate": min(1, total / exp) if exp else 0, "rate_label": f"{sv.pct(total, exp)}%", "frozen": frozen,
         "allrows": allrows, "meth": [(n, v, v / mmx * 100) for n, v in meth],
         "today_sum": sum(p.amount for p in d.payments if p.date == d.TODAY), "today": d.TODAY,
-        "admin": is_director(request.user), "debt_text": debt_text,
+        "admin": is_director(request.user), "debt_text": debt_text, "tg_on": tg.enabled(),
     })
 
 
@@ -552,12 +613,42 @@ def payment_add(request):
                "amount": d.debt_for(st, m) or None if st else None}
     form = PaymentForm(request.POST or None, initial=initial, month=m)
     if request.method == "POST" and form.is_valid():
-        p = form.save()
-        log(request, f"To'lov qo'shildi: {p.student.name} {sv.fmt(p.amount)} so'm")
-        messages.success(request, "To'lov qabul qilindi")
+        n = form.cleaned_data.get("months") or 1
+        p = form.save(commit=False)
+        total, created = p.amount, []
+        with transaction.atomic():
+            for i in range(n):
+                part = total // n + (total % n if i == 0 else 0)
+                x = Payment(student=p.student, amount=part, month=sv.shift_month(p.month, i), method=p.method,
+                            date=p.date, note=p.note if n == 1 else f"Oldindan to'lov: {n} oy")
+                x.save()
+                created.append(x)
+        months_txt = f" ({n} oyga)" if n > 1 else ""
+        log(request, f"To'lov qo'shildi: {p.student.name} {sv.fmt(total)} so'm{months_txt}")
+        tg.notify_payment(created)
+        messages.success(request, f"To'lov qabul qilindi{months_txt}")
+        p = created[0]
         return back(request, f"{reverse('tolovlar')}?m={p.month}")
     return form_page(request, form, "To'lov qabul qilish", reverse("tolovlar"),
                      extra={"debt_api": reverse("api_debt")})
+
+
+@money_required
+@require_POST
+def debt_telegram(request):
+    m = sv.valid_month(request.POST.get("m"))
+    d = sv.Data(request.user)
+    rows = sv.with_reminders(d, d.debtors(m), m)
+    if not tg.enabled():
+        messages.error(request, "Telegram bot sozlanmagan. Direktor Telegram bot sahifasida sozlaydi.")
+    else:
+        n = tg.send_debt_reminders(rows)
+        log(request, f"Qarz eslatmasi Telegram orqali yuborildi: {sv.mlabel(m)} ({n})")
+        if n:
+            messages.success(request, f"{n} ta ota-onaga eslatma yuborildi")
+        else:
+            messages.info(request, "Qarzdorlarning ota-onasi hali botga ulanmagan")
+    return redirect(f"{reverse('tolovlar')}?m={m}")
 
 
 @money_required
@@ -573,6 +664,9 @@ def api_debt(request):
 @require_POST
 def payment_delete(request, pk):
     p = get_object_or_404(Payment, pk=pk)
+    if CashClose.objects.filter(date=p.date).exists() and not is_director(request.user):
+        messages.error(request, "Bu kun kassasi yopilgan. To'lovni faqat direktor o'chira oladi.")
+        return back(request, f"{reverse('tolovlar')}?m={p.month}")
     log(request, f"To'lov o'chirildi: {p.student.name if p.student else ''} {sv.fmt(p.amount)} so'm")
     m = p.month
     p.delete()
@@ -690,6 +784,10 @@ def task_add(request):
         t.created_by = request.user
         t.save()
         log(request, f"Vazifa qo'shildi: {t.title}")
+        if t.assignee and t.assignee != request.user:
+            due = f" (muddat {t.due:%d.%m})" if t.due else ""
+            tg.notify_user(t.assignee, f"Sizga yangi vazifa: {t.title}{due}. Bergan: "
+                                       f"{request.user.get_full_name() or request.user.username}", reverse("vazifalar"))
         messages.success(request, "Saqlandi")
         return redirect("vazifalar")
     return form_page(request, form, "Yangi vazifa", reverse("vazifalar"))
@@ -908,9 +1006,14 @@ def xodimlar(request):
         with transaction.atomic():
             u = User.objects.create_user(username=cd["username"], password=cd["password"],
                                          first_name=cd["first_name"], last_name=cd["last_name"])
-            Staff.objects.create(user=u, role=cd["role"])
+            Staff.objects.create(user=u, role=cd["role"], phone=cd.get("phone", ""))
+            for g in cd.get("groups") or []:
+                g.teacher_user = u
+                g.teacher = u.get_full_name() or u.username
+                g.save(update_fields=["teacher_user", "teacher"])
         log(request, f"Xodim qo'shildi: {u.get_full_name() or u.username} ({ROLES[cd['role']]})")
-        messages.success(request, f"Xodim qo'shildi. Login: {u.username}. Parolni xodimga o'zingiz bering.")
+        remember_credentials(request, u, cd["password"])
+        messages.success(request, "Xodim qo'shildi. Pastdagi kirish ma'lumotlarini xodimga yuboring.")
         return redirect("xodimlar")
     users = User.objects.select_related("staff").order_by("-is_active", "first_name", "username")
     groups = list(Group.objects.all())
@@ -922,8 +1025,43 @@ def xodimlar(request):
                      "secs": [SECTION_LABELS[k] for k in sections_of(u)] if u.is_active else [],
                      "groups": [g for g in groups if sv.is_my_group(g, u)] if role_of(u) == "oqituvchi" else []})
     return render(request, "crm/xodimlar.html", {"section": "xodimlar", "form": form, "roles": Staff.ROLES,
+                                                  "cred": pop_credentials(request),
                                                   "rows": [r for r in rows if r["u"].is_active],
                                                   "inactive": [r for r in rows if not r["u"].is_active]})
+
+
+def remember_credentials(request, u, password):
+    """Yangi login/kodni bir marta ko'rsatish uchun sessiyada saqlaydi (keyin o'chadi)."""
+    request.session["new_cred"] = {"name": u.get_full_name() or u.username, "username": u.username,
+                                   "password": password, "role": ROLES[role_of(u)]}
+
+
+def pop_credentials(request):
+    c = request.session.pop("new_cred", None)
+    if not c:
+        return None
+    from urllib.parse import quote
+    url = request.build_absolute_uri(reverse("login"))
+    c["url"] = url
+    c["text"] = (f"Assalomu alaykum, {c['name']}! {Center.get().name} CRM tizimiga kirish:\n"
+                 f"Manzil: {url}\nLogin: {c['username']}\nKod: {c['password']}\n"
+                 f"Birinchi kirishdan keyin kodni o'zgartirishingiz mumkin.")
+    c["tg"] = "https://t.me/share/url?url=%20&text=" + quote(c["text"])
+    return c
+
+
+@section_required("xodimlar")
+@require_POST
+def staff_newcode(request, pk):
+    from .forms import make_code
+    u = get_object_or_404(User, pk=pk, is_superuser=False)
+    code = make_code()
+    u.set_password(code)
+    u.save(update_fields=["password"])
+    log(request, f"Xodimga yangi kod berildi: {u.get_full_name() or u.username}")
+    remember_credentials(request, u, code)
+    messages.success(request, "Yangi kod yaratildi. Eski kod endi ishlamaydi.")
+    return redirect("xodimlar")
 
 
 @section_required("xodimlar")
@@ -1061,8 +1199,15 @@ def zaxira(request):
     return render(request, "crm/zaxira.html", {
         "section": "zaxira", "rows": rows, "last": last, "form": RestoreForm(),
         "db_engine": settings.DB_ENGINE, "db_persistent": settings.DB_PERSISTENT,
-        "targets": bk.offsite_targets(),
+        "targets": bk.offsite_targets(), "demo": demo_ctx(request),
     })
+
+
+def demo_ctx(request):
+    from .management.commands.seed_demo import DEMO_USERS, has_demo
+    on = has_demo()
+    return {"on": on, "code": Center.get().demo_code if on else "", "url": request.build_absolute_uri(reverse("login")),
+            "users": [{"login": l, "name": f"{f} {n}", "role": ROLES[r]} for l, f, n, r in DEMO_USERS] if on else []}
 
 
 @section_required("zaxira")
@@ -1323,16 +1468,21 @@ def import_template(request):
 @director_required
 @require_POST
 def seed(request):
-    from .management.commands.seed_demo import create_demo
-    create_demo()
-    messages.success(request, "Namunaviy ma'lumot qo'shildi")
+    from .management.commands.seed_demo import create_demo, has_demo
+    if has_demo():
+        messages.info(request, "Namuna allaqachon yuklangan")
+    else:
+        create_demo()
+        log(request, "Namunaviy ma'lumot yuklandi")
+        messages.success(request, "Namunaviy ma'lumot qo'shildi: 6 oylik markaz. Demo loginlar Zaxira sahifasida.")
     return redirect("dashboard")
 
 
 @director_required
 @require_POST
 def unseed(request):
-    for m in (Payment, Student, Lead, Group):
-        m.objects.filter(is_demo=True).delete()
-    messages.success(request, "Namunalar o'chirildi")
+    from .management.commands.seed_demo import delete_demo
+    delete_demo()
+    log(request, "Namunaviy ma'lumot o'chirildi")
+    messages.success(request, "Namunalar va demo loginlar o'chirildi. Haqiqiy ma'lumotlarga tegilmadi.")
     return redirect("dashboard")

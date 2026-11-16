@@ -138,6 +138,8 @@ if not DB_PERSISTENT:
           "ishga tushishda O'CHIB KETADI. Ma'lumotlar saqlanishi uchun Neon PostgreSQL ulang\n"
           "(README: 'Ma'lumotlar saqlanib qolishi uchun').\n" + "=" * 70, file=sys.stderr)
 
+AUTHENTICATION_BACKENDS = ["crm.security.CaseInsensitiveBackend"]
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

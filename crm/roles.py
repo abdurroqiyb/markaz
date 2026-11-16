@@ -22,7 +22,7 @@ ACCESS = {
     "marketolog": ["bugun", "lidlar", "marketing", "vazifalar", "jadval", "qidiruv"],
 }
 # Faqat direktor: boshqa xodimga ham berib bo'lmaydi.
-DIRECTOR_ONLY = ["xodimlar", "jurnal", "zaxira"]
+DIRECTOR_ONLY = ["xodimlar", "jurnal", "zaxira", "tg_settings"]
 # Standart holatda faqat direktor, lekin direktor xodimga alohida ochib berishi mumkin.
 ADMIN_ONLY = ["xarajatlar", "hisobotlar"] + DIRECTOR_ONLY
 
@@ -33,7 +33,7 @@ NAV = [
     ("davomat", "Davomat", "check"), ("imtihon", "Imtihonlar", "trend"), ("tolovlar", "To'lovlar", "wallet"), ("vazifalar", "Vazifalar", "task"),
     ("marketing", "Marketing", "mega"), ("hisobotlar", "Hisobotlar", "chart"),
     ("xarajatlar", "Xarajatlar", "receipt"), ("xodimlar", "Xodimlar", "badge"),
-    ("jurnal", "Jurnal", "clock"), ("zaxira", "Zaxira", "down"), ("qidiruv", "Qidiruv", "search"),
+    ("jurnal", "Jurnal", "clock"), ("zaxira", "Zaxira", "down"), ("tg_settings", "Telegram bot", "send"), ("qidiruv", "Qidiruv", "search"),
     ("xavfsizlik", "Xavfsizlik", "shield"),
 ]
 SECTION_LABELS = {k: t for k, t, _ in NAV}

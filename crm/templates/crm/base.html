@@ -25,6 +25,7 @@
   <div class="me">
     <span>{{ user.get_full_name|default:user.username }}<small>{{ my_role_label }}</small></span>
     <button type="button" class="btn sm ghost melogout themebtn" id="themebtn" title="Tungi / kunduzgi rejim" aria-label="Tungi / kunduzgi rejim"><svg class="ic"><use href="#i-moon"/></svg></button>
+    <a class="btn sm ghost melogout bellbtn" href="{% url 'bildirishnomalar' %}" title="Bildirishnomalar" aria-label="Bildirishnomalar{% if bell %}: {{ bell }} ta{% endif %}">{% icon "bell" %}{% if bell %}<b class="bellnum">{{ bell }}</b>{% endif %}</a>
     <a class="btn sm ghost melogout" href="{% url 'xavfsizlik' %}" title="Parol va xavfsizlik">{% icon "key" %}</a>
     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sm ghost melogout" type="submit">Chiqish</button></form>
   </div>

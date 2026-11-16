@@ -118,6 +118,18 @@ blokini va `SQLITE_PATH=/var/data/db.sqlite3` qatorini izohdan chiqaring.
 - **Qarz eslatmasi**: har qarzdor yonida "Eslatma" (nusxalash) va "TG" (Telegram orqali yuborish). Matn shabloni markaz ma'lumotlarida.
 - **Imtihonlar**: guruh bo'yicha ballarni bir yo'la kiritish, reyting va o'sish grafigi (o'qituvchi faqat o'z guruhlari).
 - **Oylik hisobot PDF**: Hisobotlar → "PDF / chop etish" (brauzerda "PDF sifatida saqlash").
+- **Xodim qo'shish**: Xodimlar → faqat ism va rolni yozing. Login (`dilnoza.karimova`) va kod (`kexa-4821`)
+  avtomatik yaratiladi, o'qituvchiga guruhlari shu yerda biriktiriladi. Kirish ma'lumotlari bir marta ko'rsatiladi
+  (nusxalash / Telegram / chop etish). Yo'qolsa: "Yangi kod". Login katta-kichik harfga qaramaydi.
+- **Telegram bot** (`TELEGRAM_BOT_TOKEN`): darsga kelmasa, to'lov qabul qilinsa ota-onaga xabar; To'lovlar sahifasidan
+  qarz eslatmasi; xodimlarga har kuni ertalab eslatma. Sozlash: CRM → Telegram bot.
+- **Ota-ona kabineti**: `/ota-ona/` (telefon + farzandning 6 xonali kodi). Kod talaba profilida.
+- **Oldindan to'lov**: to'lov formasida "Necha oy uchun". **Qisman birinchi oy**: markaz ma'lumotlarida yoqiladi.
+- **Guruhga o'tkazish**: talaba profilida; eski oylar eski guruh narxida hisoblanadi, tarix profilda ko'rinadi.
+- **Kunlik kassa**: To'lovlar → Kassa. Yopilgan kunga to'lov qo'shib bo'lmaydi; farq bo'lsa direktorga xabar.
+- **Bildirishnomalar**: chap pastdagi qo'ng'iroqcha (muddati o'tgan vazifa, bugungi qo'ng'iroqlar, yangi ariza va h.k.).
+- **Namuna**: Zaxira → "Namuna yuklash" (6 oylik to'liq markaz va har rol uchun demo login), keyin bir tugma bilan
+  o'chiriladi. Buyruq: `python manage.py seed_demo` / `--delete`.
 - **Haftalik kalendar**: Jadval → Kalendar. **Tungi rejim** tugmasi chap pastda. **PWA**: telefonda "Bosh ekranga qo'shish".
 
 ## Muhit o'zgaruvchilari
@@ -137,6 +149,7 @@ blokini va `SQLITE_PATH=/var/data/db.sqlite3` qatorini izohdan chiqaring.
 | `SESSION_IDLE_MINUTES` | Faolsizlikdan keyin chiqish, daqiqa (standart 120) |
 | `LOGIN_LOCK_FAILS` / `LOGIN_LOCK_MINUTES` / `LOGIN_IP_FAILS` | Login cheklovi (5 / 15 / 20) |
 | `BACKUP_TELEGRAM_BOT_TOKEN` / `BACKUP_TELEGRAM_CHAT_ID` | Kunlik zaxirani Telegramga yuborish |
+| `TELEGRAM_BOT_TOKEN` | Ota-ona va xodimlar uchun Telegram bot (bo'lmasa zaxira boti ishlatiladi) |
 | `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `BACKUP_EMAIL_TO` | Zaxirani e-pochtaga yuborish |
 
 ## Rollar

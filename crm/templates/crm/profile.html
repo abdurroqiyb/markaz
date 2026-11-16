@@ -22,6 +22,16 @@
   {% if grades %}<div class="gradeviz">{% spark grade_spark "var(--accent)" %}</div>
     {% for x in grades %}<div class="mini"><span>{{ x.title }}<br><small class="mut">{{ x.date|date:"Y-m-d" }}</small></span><span class="rowact"><span class="pill {% if x.pct >= 80 %}good{% elif x.pct >= 60 %}warn{% else %}bad{% endif %}">{{ x.score }}/{{ x.max_score }}</span>{% url 'grade_delete' x.pk as du %}{% include "crm/_del.html" with del_url=du %}</span></div>{% endfor %}
   {% else %}<p class="mut m0">Baho hali qo'yilmagan.</p>{% endif %}
+  {% if ghist|length > 1 or shist|length > 1 %}<h3>Tarix</h3>
+    {% if ghist|length > 1 %}<p class="mut m0" style="font-size:13px">Guruhlar:</p><div class="ghist">{% for dt, gg in ghist %}<span class="pill {% if forloop.last %}info{% else %}mute{% endif %}">{{ dt|date:"d.m.Y" }}: {{ gg.name|default:"guruhsiz" }}</span>{% endfor %}</div>{% endif %}
+    {% if shist|length > 1 %}<p class="mut m0" style="font-size:13px;margin-top:8px">Holati:</p><div class="ghist">{% for dt, st in shist %}<span class="pill {% if forloop.last %}info{% else %}mute{% endif %}">{% if dt.year > 1 %}{{ dt|date:"d.m.Y" }}: {% endif %}{{ st }}</span>{% endfor %}</div>{% endif %}
+  {% endif %}
+  {% if parent_box %}<h3>Ota-ona uchun</h3>
+    <div class="mini"><span>Ota-ona kodi<br><small class="mut">{% if parent_box.cab %}Ota-ona kabineti va {% endif %}Telegram bot uchun{% if parent_box.linked %} · Telegram ulangan ({{ parent_box.linked }}){% endif %}</small></span><span class="codebox">{{ parent_box.code }}</span></div>
+    <textarea id="parenttext" hidden>{{ parent_box.text }}</textarea>
+    <div class="fbtns" style="margin-top:8px"><a class="btn sm primary" href="{{ parent_box.share }}" target="_blank" rel="noopener">Ota-onaga Telegram orqali yuborish</a><button type="button" class="btn sm" data-copy="#parenttext">Nusxalash</button>
+      {% if can_edit_students %}<form method="post" action="{% url 'student_newcode' s.pk %}" class="inl" onsubmit="return confirm('Yangi kod yaratilsinmi? Eski kod ishlamay qoladi.')">{% csrf_token %}<button class="btn sm ghost">Yangi kod</button></form>{% endif %}</div>
+  {% endif %}
   {% if money %}
   <h3>To'lovlar tarixi</h3>
   {% for p in payments %}<div class="mini"><span>{{ p.month|mlabel }}<br><small class="mut">{{ p.date|date:"Y-m-d" }} · {{ p.method }}{% if p.refund %} · qaytarish{% endif %}</small></span><span class="rowact"><span class="money">{{ p.amount|som }}</span><a class="btn sm ghost" href="{% url 'payment_receipt' p.pk %}">Kvitansiya</a></span></div>{% empty %}<p class="mut m0">To'lov hali yo'q.</p>{% endfor %}
@@ -31,7 +41,7 @@
     <a class="btn" href="{% url 'student_doc' s.pk 'shartnoma' %}">Shartnoma</a>
     <a class="btn" href="{% url 'student_doc' s.pk 'sertifikat' %}">Sertifikat</a>
     {% if money and g and s.status == "faol" or money and total_debt > 0 %}<a class="btn" href="{% url 'payment_add' %}?student={{ s.pk }}">To'lov</a>{% endif %}
-    {% if can_edit_students %}<a class="btn" href="{% url 'student_edit' s.pk %}">Tahrirlash</a>{% endif %}
+    {% if can_edit_students %}<a class="btn" href="{% url 'student_transfer' s.pk %}">Guruhga o'tkazish</a><a class="btn" href="{% url 'student_edit' s.pk %}">Tahrirlash</a>{% endif %}
     <a class="btn primary" href="{% url 'talabalar' %}">Yopish</a>
   </div>
 </div>
