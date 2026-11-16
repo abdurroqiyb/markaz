@@ -12,7 +12,7 @@
 <div class="calwrap"><div class="cal" style="--nh:{{ nh }}">
   <div class="calhours"><div class="calhead"></div><div class="calbody">{% for h in hours %}<span>{{ h }}</span>{% endfor %}</div></div>
   {% for day in cal %}<div class="calday{% if day.today %} today{% endif %}"><div class="calhead">{{ day.name }}</div><div class="calbody">
-    {% for b in day.blocks %}<div class="calev{% if b.bad %} bad{% endif %}" style="top:{{ b.top|floatformat:2 }}%;height:{{ b.h|floatformat:2 }}%;--ev:var(--av{{ b.c }})" title="{{ b.g.name }} · {{ b.time }}{% if b.g.room %} · {{ b.g.room }}{% endif %}"><b>{{ b.g.name }}</b><small>{{ b.time }}</small><small>{{ b.g.teacher }}{% if b.g.room %} · {{ b.g.room }}{% endif %}</small></div>{% endfor %}
+    {% for b in day.blocks %}<div class="calev{% if b.bad %} bad{% endif %}" style="top:{{ b.top|stringformat:'.2f' }}%;height:{{ b.h|stringformat:'.2f' }}%;--ev:var(--av{{ b.c }})" title="{{ b.g.name }} · {{ b.time }}{% if b.g.room %} · {{ b.g.room }}{% endif %}"><b>{{ b.g.name }}</b><small>{{ b.time }}</small><small>{{ b.g.teacher }}{% if b.g.room %} · {{ b.g.room }}{% endif %}</small></div>{% endfor %}
   </div></div>{% endfor %}
 </div></div>
 {% else %}

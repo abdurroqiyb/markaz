@@ -1,5 +1,6 @@
 from django.urls import path
 
+from . import exams
 from . import views as v
 
 urlpatterns = [
@@ -37,6 +38,7 @@ urlpatterns = [
     path("guruhlar/<int:pk>/ochirish/", v.group_delete, name="group_delete"),
     path("jadval/", v.jadval, name="jadval"),
     path("davomat/", v.davomat, name="davomat"),
+    path("imtihonlar/", exams.imtihon, name="imtihon"),
 
     path("tolovlar/", v.tolovlar, name="tolovlar"),
     path("tolovlar/yangi/", v.payment_add, name="payment_add"),

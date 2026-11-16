@@ -624,3 +624,26 @@ def cabinet(d, groups):
     out["rest"] = max(0, out["sal"] - out["paid"])
     return out
 
+
+
+# ---------------------------------------------------------------- qarz eslatmasi
+class _Safe(dict):
+    def __missing__(self, k):
+        return "{" + k + "}"
+
+
+def reminder(center, s, g, debt, m):
+    """Markaz sozlamasidagi shablon bo'yicha bitta talabaga eslatma matni."""
+    tpl = center.reminder_text or ("Assalomu alaykum! {ism} uchun {oy} oyi to'lovi {summa} so'm hali to'lanmagan. "
+                                   "{markaz}, {telefon}")
+    return tpl.format_map(_Safe(ism=s.name, summa=fmt(debt), oy=mlabel(m), guruh=g.name if g else "",
+                                markaz=center.name or "", telefon=center.phone or "")).strip()
+
+
+def with_reminders(d, rows, m):
+    from urllib.parse import quote
+    for x in rows:
+        x["msg"] = reminder(d.center, x["s"], x.get("g") or d.group_of(x["s"]), x["debt"], m)
+        x["tg"] = "https://t.me/share/url?url=%20&text=" + quote(x["msg"])
+        x["to"] = x["s"].parent or x["s"].phone
+    return rows

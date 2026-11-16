@@ -116,7 +116,7 @@ def bugun(request):
         "section": "bugun", "d": d, "lead_ok": allowed(u, "lidlar"), "greet": greet(), "first": first_name(u), "role": ROLES[role_of(u)],
         "lessons_today": d.lessons_today(u), "my_tasks": sorted(my_tasks, key=lambda t: t.due or date.max)[:6],
         "due_leads": d.due_leads()[:6], "trials": d.trials()[:6], "bdays": d.birthdays()[:6],
-        "debtors": d.debtors(d.NOW)[:5] if can_money(u) else [], "returning": d.returning()[:6],
+        "debtors": sv.with_reminders(d, d.debtors(d.NOW)[:5], d.NOW) if can_money(u) else [], "returning": d.returning()[:6],
         "paused": d.paused_count(), "ending": d.course_ending(),
     })
 
@@ -153,7 +153,7 @@ def dashboard(request):
         "series6": d.series6(), "exp_cats": d.expense_cats(d.NOW) if admin else [],
         "group_fill": [fill_item(d, g) for g in d.groups],
         "rate_label": f"{round(rate * 100)}%" if expected else "-",
-        "debtors": d.debtors(d.NOW)[:6], "risks": d.risks()[:6], "waiting": d.waiting()[:6],
+        "debtors": sv.with_reminders(d, d.debtors(d.NOW)[:6], d.NOW), "risks": d.risks()[:6], "waiting": d.waiting()[:6],
         "due_leads": d.due_leads()[:6], "trials": d.trials()[:6], "bdays": d.birthdays()[:6],
         "returning": d.returning()[:6], "paused": d.paused_count(), "ending": d.course_ending(),
         "my_tasks": sorted(my_tasks, key=lambda t: t.due or date.max)[:6],
@@ -518,7 +518,7 @@ def tolovlar(request):
     m = month_param(request)
     pays = sorted([p for p in d.payments if p.month == m], key=lambda p: (p.date, p.created_at), reverse=True)
     total = sum(p.amount for p in pays)
-    ds = d.debtors(m)
+    ds = sv.with_reminders(d, d.debtors(m), m)
     exp = d.expected_for(m)
     frozen = any(k[1] == m for k in d.charges)
     allrows = sorted([{"s": s, "t": d.total_debt(s), "od": d.overdue_months(s)}
@@ -526,9 +526,7 @@ def tolovlar(request):
     allrows = [r for r in allrows if r["t"] > 0][:12]
     meth = [(n, sum(p.amount for p in pays if p.method == n)) for n, _ in Payment.METHODS]
     mmx = max([1] + [v for _, v in meth])
-    debt_text = "\n".join(
-        f"Assalomu alaykum! {x['s'].name} uchun {sv.mlabel(m)} oyi to'lovidan {sv.fmt(x['debt'])} so'm qolgan."
-        + (f" ({x['s'].parent or x['s'].phone})" if (x['s'].parent or x['s'].phone) else "") for x in ds)
+    debt_text = "\n\n".join(x["msg"] + (f" ({x['to']})" if x["to"] else "") for x in ds)
     return render(request, "crm/tolovlar.html", {
         "section": "tolovlar", **month_nav(request, m), "pays": [{"p": p, "s": d.student_map.get(p.student_id)} for p in pays],
         "total": total, "debtors": ds, "dsum": sum(x["debt"] for x in ds), "expected": exp,
@@ -855,7 +853,11 @@ def hisobotlar(request):
         i, e = d.income(k), d.month_exp(k)
         six.append({"label": sv.mlabel(k), "short": sv.SHORT[int(k[5:]) - 1], "i": i, "e": e, "net": i - e,
                     "n": sum(1 for p in d.payments if p.month == k and not p.refund and p.amount > 0)})
-    return render(request, "crm/hisobotlar.html", {
+    tpl = "crm/hisobot_print.html" if request.GET.get("chop") else "crm/hisobotlar.html"
+    return render(request, tpl, {
+        "now": timezone.localtime(), "students_n": sum(1 for s in d.students if s.status == "faol"),
+        "debt_m": sum(x["debt"] for x in d.debtors(m)), "expected_m": d.expected_for(m),
+        "exp_cats": d.expense_cats(m),
         "section": "hisobotlar", **month_nav(request, m), "inc": inc, "exp": exp, "net": inc - exp,
         "margin": sv.pct(inc - exp, inc) if inc else None, "p_inc": c.plan_income, "p_exp": c.plan_expense,
         "inc_rate": min(1, inc / c.plan_income) if c.plan_income else 0, "inc_pct": f"{sv.pct(inc, c.plan_income)}%",

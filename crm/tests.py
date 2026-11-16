@@ -7,7 +7,7 @@ from django.urls import reverse
 from . import services as sv
 from .management.commands.seed_demo import create_demo
 from . import backup as bk
-from .models import Attendance, Backup, Charge, Group, Lead, Lesson, Payment, Promo, Staff, Student
+from .models import Attendance, Backup, Charge, Grade, Group, Lead, Lesson, Payment, Promo, Staff, Student
 
 User = get_user_model()
 
@@ -360,3 +360,64 @@ class DesignTest(Base):
         r = self.client.get(reverse("xarajatlar"))
         self.assertContains(r, "Qisman")
         self.assertContains(r, "300\xa0000")
+
+
+class FeatureTest(Base):
+    def test_public_form(self):
+        import time
+        from django.core.cache import cache
+        cache.clear()
+        Group.objects.create(name="A", price=1, course="Ingliz tili")
+        self.client.logout()
+        r = self.client.get(reverse("ariza"))
+        self.assertContains(r, "Ingliz tili")
+        ok = {"name": "Nodira", "phone": "+998 90 111 22 33", "course": "Ingliz tili", "ts": time.time() - 10}
+        r = self.client.post(reverse("ariza"), ok)
+        self.assertContains(r, "qabul qilindi")
+        lead = Lead.objects.get(name="Nodira")
+        self.assertEqual(lead.source, "Sayt (ariza)")
+        # bot (honeypot) - lid yaratilmaydi
+        self.client.post(reverse("ariza"), {**ok, "name": "Bot", "website": "spam"})
+        self.assertFalse(Lead.objects.filter(name="Bot").exists())
+        # cheklov
+        for i in range(6):
+            self.client.post(reverse("ariza"), {**ok, "name": f"X{i}"})
+        self.assertEqual(Lead.objects.filter(name__startswith="X").count(), 4)
+        from .models import Center
+        c = Center.get(); c.public_form = False; c.save()
+        self.assertEqual(self.client.get(reverse("ariza")).status_code, 404)
+
+    def test_reminder_text(self):
+        g = Group.objects.create(name="A", price=300000)
+        s = Student.objects.create(name="Vali", group=g, parent="+99890", join_date=date(2020, 1, 1))
+        r = self.client.get(reverse("tolovlar"))
+        self.assertContains(r, "t.me/share")
+        self.assertContains(r, "Vali uchun")
+        d = sv.Data()
+        msg = sv.reminder(d.center, s, g, 300000, sv.now_month())
+        self.assertIn("300\\xa0000".encode().decode("unicode_escape"), msg)
+
+    def test_exams(self):
+        t = User.objects.create_user("ustoz", password="Kuchli-parol-123", first_name="Ali")
+        Staff.objects.create(user=t, role="oqituvchi")
+        g = Group.objects.create(name="A", price=1, teacher_user=t)
+        other = Group.objects.create(name="Begona guruh", price=1)
+        a = Student.objects.create(name="Aziz", group=g)
+        b = Student.objects.create(name="Bobur", group=g)
+        self.client.force_login(t)
+        r = self.client.post(reverse("imtihon"), {"g": g.pk, "title": "Unit 1", "date": "2026-11-10",
+                                                   "max_score": 50, f"s{a.pk}": "45", f"s{b.pk}": "30"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Grade.objects.filter(title="Unit 1").count(), 2)
+        r = self.client.get(r["Location"])
+        self.assertContains(r, "Reyting: Unit 1")
+        self.assertContains(r, "1. Aziz")
+        # boshqa guruh o'qituvchiga ko'rinmaydi
+        r = self.client.get(reverse("imtihon") + f"?g={other.pk}")
+        self.assertNotContains(r, "Begona guruh")
+
+    def test_print_report(self):
+        create_demo()
+        r = self.client.get(reverse("hisobotlar") + "?chop=1")
+        self.assertContains(r, "Oylik hisobot")
+        self.assertContains(r, "window.print()")

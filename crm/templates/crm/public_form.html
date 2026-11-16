@@ -1,0 +1,20 @@
+{% load static %}<!doctype html>
+<html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kursga yozilish · {{ center.name }}</title>
+<meta name="description" content="{{ center.name }}: kursga yozilish uchun ariza">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="{% static 'crm/css/app.css' %}">
+<style>.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}.pub{min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:radial-gradient(800px 300px at 100% 0,rgba(107,147,255,.25),transparent 60%),var(--bg)}.pub .formcard{max-width:440px;width:100%}.pubok{text-align:center}.pubok .mark{margin:0 auto 12px;width:56px;height:56px;font-size:28px;background:var(--good)}</style>
+</head><body><main class="pub">
+{% if closed %}<div class="formcard"><h2>Ariza qabul qilinmayapti</h2><p class="mut">Iltimos, markazga to'g'ridan-to'g'ri qo'ng'iroq qiling{% if center.phone %}: {{ center.phone }}{% endif %}.</p></div>
+{% elif done %}<div class="formcard pubok"><span class="mark">✓</span><h2>Arizangiz qabul qilindi!</h2><p class="mut">Tez orada siz bilan bog'lanamiz.{% if center.phone %} Savollar bo'lsa: <b>{{ center.phone }}</b>{% endif %}</p></div>
+{% else %}<form method="post" class="formcard" novalidate>{% csrf_token %}
+  <div class="brand loginbrand"><span class="mark">{{ center.name|default:"M"|slice:":1" }}</span><div>{{ center.name|default:"O'quv markaz" }}<small>{% if center.address %}{{ center.address }}{% else %}Kursga yozilish{% endif %}</small></div></div>
+  <h2>Kursga yozilish</h2><p class="mut m0">Ma'lumotlaringizni qoldiring, biz siz bilan bog'lanamiz.</p>
+  {% if form.non_field_errors %}<div class="banner error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% for f in form %}{% if f.name == "website" %}<div class="hp" aria-hidden="true"><label>Sayt<br>{{ f }}</label></div>{% elif f.is_hidden %}{{ f }}{% else %}
+  <div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}{% if f.field.required %} *{% endif %}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endif %}{% endfor %}
+  <div class="fbtns"><button class="btn primary" style="width:100%">Yuborish</button></div>
+</form>{% endif %}
+</main></body></html>
