@@ -53,6 +53,9 @@ class Staff(models.Model):
     ]
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="staff")
     role = models.CharField("Rol", max_length=20, choices=ROLES, default="oqituvchi")
+    phone = models.CharField("Telefon", max_length=50, blank=True)
+    # Bo'sh bo'lsa rol bo'yicha standart bo'limlar; aks holda faqat shu ro'yxatdagilar ochiq.
+    sections = models.JSONField("Ochiq bo'limlar", default=list, blank=True)
 
     class Meta:
         verbose_name = "Xodim"
@@ -72,6 +75,9 @@ class Group(TimeStamped):
     name = models.CharField("Guruh nomi", max_length=200)
     course = models.CharField("Kurs", max_length=200, blank=True)
     teacher = models.CharField("O'qituvchi", max_length=200, blank=True)
+    teacher_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="taught_groups", verbose_name="O'qituvchi hisobi",
+                                     help_text="Tanlansa, o'qituvchi o'z kabinetida shu guruhni ko'radi")
     days = models.CharField("Dars kunlari", max_length=100, blank=True, help_text="Masalan: Du-Chor-Ju")
     time = models.CharField("Vaqti", max_length=50, blank=True, help_text="Masalan: 18:00-19:30")
     room = models.CharField("Xona", max_length=100, blank=True)
@@ -91,6 +97,12 @@ class Group(TimeStamped):
 
     def __str__(self):
         return self.name
+
+    def save(self, *a, **kw):
+        if self.teacher_user_id and not self.teacher.strip():
+            u = self.teacher_user
+            self.teacher = u.get_full_name() or u.username
+        super().save(*a, **kw)
 
 
 # ---------------------------------------------------------------- lidlar
@@ -391,3 +403,23 @@ class ActivityLog(models.Model):
 
     def __str__(self):
         return self.text
+
+
+# ---------------------------------------------------------------- zaxira
+class Backup(models.Model):
+    """Ma'lumotlar bazasining siqilgan (gzip JSON) nusxasi."""
+    KINDS = [("auto", "Avtomatik"), ("manual", "Qo'lda"), ("pre_restore", "Tiklashdan oldin")]
+    created_at = models.DateTimeField("Sana", auto_now_add=True, db_index=True)
+    kind = models.CharField("Turi", max_length=20, choices=KINDS, default="auto")
+    size = models.PositiveIntegerField("Hajmi (bayt)", default=0)
+    objects_count = models.PositiveIntegerField("Yozuvlar soni", default=0)
+    summary = models.JSONField("Tarkibi", default=dict, blank=True)
+    data = models.BinaryField("Ma'lumot", editable=False)
+
+    class Meta:
+        verbose_name = "Zaxira nusxa"
+        verbose_name_plural = "Zaxira nusxalar"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Zaxira {self.created_at:%Y-%m-%d %H:%M}"

@@ -6,12 +6,13 @@ from django.urls import reverse
 
 from . import services as sv
 from .management.commands.seed_demo import create_demo
-from .models import Attendance, Charge, Group, Lead, Lesson, Payment, Promo, Staff, Student
+from . import backup as bk
+from .models import Attendance, Backup, Charge, Group, Lead, Lesson, Payment, Promo, Staff, Student
 
 User = get_user_model()
 
 PAGES = ["bugun", "dashboard", "lidlar", "talabalar", "guruhlar", "jadval", "davomat", "tolovlar",
-         "vazifalar", "marketing", "hisobotlar", "xarajatlar", "xodimlar", "jurnal", "qidiruv"]
+         "vazifalar", "marketing", "hisobotlar", "xarajatlar", "xodimlar", "jurnal", "qidiruv", "zaxira", "parol"]
 
 
 class Base(TestCase):
@@ -107,3 +108,125 @@ class RolesTest(TestCase):
         self.assertEqual(self.client.get(reverse("davomat")).status_code, 200)
         for name in ["tolovlar", "xarajatlar", "hisobotlar", "xodimlar", "dashboard", "export_xlsx"]:
             self.assertEqual(self.client.get(reverse(name)).status_code, 302, name)
+
+
+class AccessTest(TestCase):
+    def setUp(self):
+        self.boss = User.objects.create_superuser("boss", password="Kuchli-parol-123")
+        self.t = User.objects.create_user("dilnoza", password="Kuchli-parol-123", first_name="Dilnoza", last_name="Karimova")
+        Staff.objects.create(user=self.t, role="oqituvchi")
+        self.mine = Group.objects.create(name="Mine", price=300000, teacher_user=self.t, days="Du-Chor-Ju",
+                                         pay_model="fixed", pay_value=2000000)
+        self.byname = Group.objects.create(name="ByName", price=300000, teacher="dilnoza karimova")
+        self.other = Group.objects.create(name="Other", price=300000, teacher="Sardor")
+        self.s1 = Student.objects.create(name="Mening talabam", group=self.mine)
+        self.s2 = Student.objects.create(name="Begona talaba", group=self.other)
+
+    def test_teacher_name_autofill_and_scope(self):
+        self.assertEqual(self.mine.teacher, "Dilnoza Karimova")
+        self.assertEqual(sv.my_group_ids(self.t), {self.mine.id, self.byname.id})
+        self.assertIsNone(sv.my_group_ids(self.boss))
+
+    def test_teacher_sees_only_own(self):
+        self.client.force_login(self.t)
+        r = self.client.get(reverse("talabalar"))
+        self.assertContains(r, "Mening talabam")
+        self.assertNotContains(r, "Begona talaba")
+        self.assertEqual(self.client.get(reverse("student_profile", args=[self.s2.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("student_profile", args=[self.s1.pk])).status_code, 200)
+        r = self.client.get(reverse("davomat"))
+        self.assertContains(r, "Mine")
+        self.assertNotContains(r, ">Other<")
+        self.assertEqual(self.client.get(reverse("student_edit", args=[self.s1.pk])).status_code, 302)
+        r = self.client.get(reverse("kabinet"))
+        self.assertContains(r, "2\xa0000\xa0000")
+        self.assertEqual(self.client.get(reverse("home"))["Location"], reverse("kabinet"))
+
+    def test_director_views_teacher_cabinet(self):
+        self.client.force_login(self.boss)
+        r = self.client.get(reverse("kabinet") + f"?t={self.t.pk}")
+        self.assertContains(r, "Mine")
+        self.assertEqual(self.client.get(reverse("kabinet")).status_code, 200)
+
+    def test_custom_sections(self):
+        self.client.force_login(self.boss)
+        r = self.client.post(reverse("staff_edit", args=[self.t.pk]), {
+            "first_name": "Dilnoza", "last_name": "Karimova", "role": "administrator",
+            "custom": "on", "sections": ["lidlar", "hisobotlar"]})
+        self.assertEqual(r.status_code, 302)
+        self.t.refresh_from_db()
+        self.assertEqual(self.t.staff.sections, ["lidlar", "hisobotlar"])
+        bad = self.client.post(reverse("staff_edit", args=[self.t.pk]), {
+            "first_name": "D", "role": "administrator", "custom": "on", "sections": ["xodimlar"]})
+        self.assertEqual(bad.status_code, 200)  # xodimlar faqat direktorga, berib bo'lmaydi
+        self.client.force_login(self.t)
+        self.assertEqual(self.client.get(reverse("hisobotlar")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("lidlar")).status_code, 200)
+        for name in ["talabalar", "tolovlar", "xodimlar", "zaxira", "jurnal"]:
+            self.assertEqual(self.client.get(reverse(name)).status_code, 302, name)
+
+    def test_password_reset_and_change(self):
+        self.client.force_login(self.boss)
+        self.client.post(reverse("staff_password", args=[self.t.pk]), {"password": "Yangi-parol-456"})
+        self.assertTrue(User.objects.get(pk=self.t.pk).check_password("Yangi-parol-456"))
+        self.client.force_login(User.objects.get(pk=self.t.pk))
+        r = self.client.post(reverse("parol"), {"old_password": "Yangi-parol-456",
+                                                "new_password1": "Boshqa-parol-789", "new_password2": "Boshqa-parol-789"})
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(User.objects.get(pk=self.t.pk).check_password("Boshqa-parol-789"))
+
+    def test_block_and_restore_staff(self):
+        self.client.force_login(self.boss)
+        self.client.post(reverse("staff_remove", args=[self.t.pk]))
+        self.assertFalse(User.objects.get(pk=self.t.pk).is_active)
+        self.client.post(reverse("staff_restore", args=[self.t.pk]))
+        self.assertTrue(User.objects.get(pk=self.t.pk).is_active)
+
+    def test_teacher_cannot_backup(self):
+        self.client.force_login(self.t)
+        self.assertEqual(self.client.get(reverse("backup_download_now")).status_code, 302)
+        self.assertEqual(self.client.post(reverse("backup_create")).status_code, 302)
+        self.assertFalse(Backup.objects.filter(kind="manual").exists())
+
+
+class BackupTest(Base):
+    def test_roundtrip(self):
+        create_demo()
+        n_students, n_pay = Student.objects.count(), Payment.objects.count()
+        b = bk.make_backup("manual")
+        self.assertGreater(b.objects_count, 10)
+        Student.objects.all().delete()
+        Payment.objects.all().delete()
+        r = self.client.post(reverse("backup_restore", args=[b.pk]), {"confirm": "tiklash"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Student.objects.count(), n_students)
+        self.assertEqual(Payment.objects.count(), n_pay)
+        self.assertTrue(Backup.objects.filter(kind="pre_restore").exists())
+        # tiklashdan keyin yangi yozuv qo'shish (sequence to'g'ri)
+        Student.objects.create(name="Yangi")
+
+    def test_download_and_upload(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        Group.objects.create(name="Zaxira guruhi", price=1)
+        raw = self.client.get(reverse("backup_download_now")).content
+        Group.objects.all().delete()
+        f = SimpleUploadedFile("z.json.gz", raw, content_type="application/gzip")
+        self.client.post(reverse("backup_restore_file"), {"confirm": "TIKLASH", "file": f})
+        self.assertTrue(Group.objects.filter(name="Zaxira guruhi").exists())
+
+    def test_bad_file_and_confirm(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        Group.objects.create(name="Qolsin", price=1)
+        f = SimpleUploadedFile("z.json", b'{"x":1}')
+        self.client.post(reverse("backup_restore_file"), {"confirm": "TIKLASH", "file": f})
+        b = bk.make_backup()
+        self.client.post(reverse("backup_restore", args=[b.pk]), {"confirm": "yo'q"})
+        self.assertTrue(Group.objects.filter(name="Qolsin").exists())
+
+    def test_daily_and_retention(self):
+        Backup.objects.all().delete()
+        self.assertIsNotNone(bk.ensure_daily_backup(force_check=True))
+        self.assertIsNone(bk.ensure_daily_backup(force_check=True))
+        for _ in range(bk.KEEP + 3):
+            bk.make_backup()
+        self.assertEqual(Backup.objects.count(), bk.KEEP)

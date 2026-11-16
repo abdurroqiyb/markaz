@@ -1,0 +1,29 @@
+{% extends "crm/base.html" %}
+{% load crm_tags humanize %}
+{% block title %}Zaxira nusxa{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Zaxira nusxa</h1><p class="sub">Har kuni avtomatik olinadi. Oxirgi {{ rows|length }} ta nusxa saqlanadi</p></div>
+<div class="tools">
+  <a class="btn" href="{% url 'backup_download_now' %}">{% icon "down" %} Hozirgi holatni yuklab olish</a>
+  <form method="post" action="{% url 'backup_create' %}" class="inl">{% csrf_token %}<button class="btn primary">Hozir zaxira olish</button></form>
+</div></div>
+<div class="tiles">
+  <div class="tile"><div class="lbl"><span class="ico {% if db_persistent %}good{% else %}bad{% endif %}">{% icon "shield" %}</span>Ma'lumotlar bazasi</div><div class="num" style="font-size:22px">{{ db_engine }}</div><div class="hint">{% if db_persistent %}Ma'lumotlar doimiy saqlanadi{% else %}Vaqtinchalik: qayta ishga tushganda o'chadi!{% endif %}</div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "clock" %}</span>Oxirgi avtomatik nusxa</div><div class="num" style="font-size:22px">{% if last %}{{ last.created_at|naturaltime }}{% else %}hali yo'q{% endif %}</div><div class="hint">{% if last %}{{ last.created_at|date:"Y-m-d H:i" }} · {{ last.objects_count }} yozuv{% else %}Birinchi kirishda olinadi{% endif %}</div></div>
+</div>
+{% if not db_persistent %}<div class="banner error">Hozir ma'lumotlar Render serveridagi vaqtinchalik SQLite faylida. Zaxira nusxalar ham shu bazada turgani uchun ular ham o'chib ketadi. Render → Environment bo'limiga Neon PostgreSQL <b>DATABASE_URL</b> qo'shing va muhim paytlarda "Hozirgi holatni yuklab olish" bilan faylni kompyuteringizga saqlang.</div>{% endif %}
+<section class="panel"><h2>Nusxalar</h2>
+{% if rows %}<div class="tblwrap"><table class="tbl"><thead><tr><th>Sana</th><th>Turi</th><th class="r">Yozuvlar</th><th class="r">Hajmi</th><th></th></tr></thead><tbody>
+{% for b in rows %}<tr><td>{{ b.created_at|date:"Y-m-d H:i" }}<br><small class="mut">{{ b.created_at|naturaltime }}</small></td><td><span class="pill {% if b.kind == 'auto' %}good{% elif b.kind == 'manual' %}info{% else %}mute{% endif %}">{{ b.get_kind_display }}</span></td><td class="r">{{ b.objects_count }}</td><td class="r">{{ b.size|filesizeformat }}</td>
+<td class="r"><span class="rowact" style="justify-content:flex-end"><a class="btn sm ghost" href="{% url 'backup_download' b.pk %}">Yuklab olish</a>
+<details class="restore"><summary class="btn sm danger">Tiklash</summary><form method="post" action="{% url 'backup_restore' b.pk %}" class="stack">{% csrf_token %}<small class="mut">Joriy ma'lumotlar shu nusxadagisi bilan almashtiriladi. Avval joriy holat ham zaxiraga olinadi.</small><input name="confirm" placeholder="TIKLASH" aria-label="Tasdiqlash" autocomplete="off"><button class="btn sm danger">Tasdiqlayman</button></form></details></span></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="mut m0">Hali nusxa yo'q. "Hozir zaxira olish" tugmasini bosing.</p>{% endif %}
+</section>
+<section class="panel"><h2>Fayldan tiklash</h2>
+  <form method="post" action="{% url 'backup_restore_file' %}" enctype="multipart/form-data" class="stack" novalidate>{% csrf_token %}
+    <div class="frow"><div class="field"><label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>{{ form.file }}</div><div class="field"><label for="{{ form.confirm.id_for_label }}">{{ form.confirm.label }}</label>{{ form.confirm }}</div></div>
+    <div class="fbtns"><button class="btn danger">Fayldan tiklash</button></div>
+  </form>
+  <p class="mut m0" style="font-size:13px;margin-top:8px">Server buyrug'i bilan ham bo'ladi: <code>python manage.py backup_db --file zaxira.json.gz</code> va <code>python manage.py restore_db zaxira.json.gz --yes</code>.</p>
+</section>
+{% endblock %}

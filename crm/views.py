@@ -4,24 +4,30 @@ import re
 from datetime import date, datetime
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse, JsonResponse
+from functools import wraps
+
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import services as sv
+from . import backup as bk
 from .forms import (AdForm, CenterForm, ExpenseForm, GradeForm, GroupForm, ImportForm,
                     LeadCallForm, LeadForm, PaymentForm, PlanForm, PromoForm, RefundForm,
-                    ScriptForm, StaffCreateForm, StudentForm, TaskForm)
-from .models import (ActivityLog, AdSpend, Attendance, Center, Charge, Expense, Grade, Group,
+                    ResetPasswordForm, RestoreForm, ScriptForm, StaffCreateForm, StaffEditForm,
+                    StudentForm, TaskForm)
+from .models import (ActivityLog, AdSpend, Attendance, Backup, Center, Charge, Expense, Grade, Group,
                      Lead, LeadCall, Lesson, Payment, Promo, Script, Staff, Student, Task)
-from .roles import (ROLES, allowed, can_money, director_required, home_section, is_director,
-                    money_required, role_of, section_required)
+from .roles import (ROLES, SECTION_LABELS, allowed, can_money, director_required, home_section,
+                    is_director, is_teacher_scoped, money_required, role_of, sections_of, section_required)
 
 User = get_user_model()
 
@@ -62,6 +68,26 @@ def fill_item(d, g):
             "label": f"{round(p * 100)}%" if g.capacity else str(n)}
 
 
+def scoped_student(request, pk):
+    """Talaba; o'qituvchi uchun faqat o'z guruhidagisi (aks holda 404)."""
+    s = get_object_or_404(Student, pk=pk)
+    scope = sv.my_group_ids(request.user)
+    if scope is not None and s.group_id not in scope:
+        raise Http404("Talaba topilmadi")
+    return s
+
+
+def not_teacher(view):
+    """O'qituvchi talabalarni ko'radi va baho qo'yadi, lekin qo'shmaydi/o'chirmaydi."""
+    @wraps(view)
+    def inner(request, *a, **kw):
+        if is_teacher_scoped(request.user):
+            messages.error(request, "Bu amal o'qituvchi uchun yopiq.")
+            return redirect("talabalar")
+        return view(request, *a, **kw)
+    return inner
+
+
 def verb(obj):
     return "o'zgartirildi" if obj else "qo'shildi"
 
@@ -83,7 +109,7 @@ def home(request):
 
 @section_required("bugun")
 def bugun(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     u = request.user
     my_tasks = Task.objects.filter(done=False).filter(Q(assignee=u) | Q(assignee__isnull=True))
     return render(request, "crm/bugun.html", {
@@ -97,7 +123,7 @@ def bugun(request):
 
 @section_required("dashboard")
 def dashboard(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     u = request.user
     admin = is_director(u)
     faol = [s for s in d.students if s.status == "faol"]
@@ -218,7 +244,7 @@ def lead_to_student(request, pk):
 # ---------------------------------------------------------------- talabalar
 @section_required("talabalar")
 def talabalar(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     q = request.GET.get("q", "").strip()
     gf = request.GET.get("g", "all")
     rows = []
@@ -236,6 +262,7 @@ def talabalar(request):
 
 
 @section_required("talabalar")
+@not_teacher
 def student_form(request, pk=None, from_lead=None):
     obj = get_object_or_404(Student, pk=pk) if pk else None
     previous = Student.objects.get(pk=pk) if pk else None
@@ -263,6 +290,7 @@ def student_form(request, pk=None, from_lead=None):
 
 
 @section_required("talabalar")
+@not_teacher
 @require_POST
 def student_delete(request, pk):
     s = get_object_or_404(Student, pk=pk)
@@ -273,6 +301,7 @@ def student_delete(request, pk):
 
 
 @section_required("talabalar")
+@not_teacher
 @require_POST
 def student_activate(request, pk):
     s = get_object_or_404(Student, pk=pk)
@@ -285,8 +314,8 @@ def student_activate(request, pk):
 
 @section_required("talabalar")
 def student_profile(request, pk):
-    d = sv.Data()
-    s = d.student_map.get(pk) or get_object_or_404(Student, pk=pk)
+    d = sv.Data(request.user)
+    s = d.student_map.get(pk) or scoped_student(request, pk)
     g = d.group_of(s)
     marks = d.student_marks(s)
     came = sum(1 for _, st in marks if st == "keldi")
@@ -305,8 +334,8 @@ def student_profile(request, pk):
 
 @section_required("talabalar")
 def student_doc(request, pk, kind):
-    d = sv.Data()
-    s = get_object_or_404(Student, pk=pk)
+    d = sv.Data(request.user)
+    s = scoped_student(request, pk)
     if kind == "shartnoma":
         title, text = f"Shartnoma: {s.name}", sv.contract_text(d, s)
     else:
@@ -317,7 +346,7 @@ def student_doc(request, pk, kind):
 
 @section_required("talabalar")
 def grade_add(request, pk):
-    s = get_object_or_404(Student, pk=pk)
+    s = scoped_student(request, pk)
     form = GradeForm(request.POST or None, initial={"max_score": 100, "date": sv.today()})
     if request.method == "POST" and form.is_valid():
         gr = form.save(commit=False)
@@ -333,6 +362,7 @@ def grade_add(request, pk):
 @require_POST
 def grade_delete(request, pk):
     gr = get_object_or_404(Grade, pk=pk)
+    scoped_student(request, gr.student_id)
     sid = gr.student_id
     gr.delete()
     log(request, "Baho o'chirildi")
@@ -348,7 +378,7 @@ def branch_ctx(request, groups):
 
 @section_required("guruhlar")
 def guruhlar(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     br, branches = branch_ctx(request, d.groups)
     cf, _ = sv.conflicts(d.groups)
     rows = []
@@ -384,7 +414,7 @@ def group_delete(request, pk):
 
 @section_required("jadval")
 def jadval(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     br, branches = branch_ctx(request, d.groups)
     gs = [g for g in d.groups if (not br or g.branch == br) and sv.parse_days(g.days)]
     cf, cf_list = sv.conflicts(d.groups)
@@ -404,7 +434,7 @@ ATT = Attendance.STATUSES
 
 @section_required("davomat")
 def davomat(request):
-    groups = list(Group.objects.all())
+    groups = sv.Data(request.user).groups
     if not groups:
         return render(request, "crm/davomat.html", {"section": "davomat", "no_groups": True})
     src = request.POST if request.method == "POST" else request.GET
@@ -465,7 +495,7 @@ def davomat(request):
 # ---------------------------------------------------------------- to'lovlar
 @money_required
 def tolovlar(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     m = month_param(request)
     pays = sorted([p for p in d.payments if p.month == m], key=lambda p: (p.date, p.created_at), reverse=True)
     total = sum(p.amount for p in pays)
@@ -496,7 +526,7 @@ def payment_add(request):
     if not Student.objects.filter(status="faol").exists():
         messages.error(request, "Avval faol talaba qo'shing")
         return redirect("talabalar")
-    d = sv.Data()
+    d = sv.Data(request.user)
     sid = request.GET.get("student")
     st = Student.objects.filter(pk=sid, status="faol").first() if sid else Student.objects.filter(status="faol").order_by("name").first()
     initial = {"student": st, "month": m, "method": "Naqd", "date": sv.today(),
@@ -513,7 +543,7 @@ def payment_add(request):
 
 @money_required
 def api_debt(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     s = d.student_map.get(int(request.GET.get("student") or 0))
     m = sv.valid_month(request.GET.get("m"))
     return JsonResponse({"debt": d.debt_for(s, m) if s else 0})
@@ -549,7 +579,7 @@ def payment_refund(request, pk):
 def payment_receipt(request, pk):
     p = get_object_or_404(Payment, pk=pk)
     return render(request, "crm/doc.html", {"section": "tolovlar", "title": "Kvitansiya",
-                                             "text": sv.receipt_text(sv.Data(), p),
+                                             "text": sv.receipt_text(sv.Data(request.user), p),
                                              "cancel": f"{reverse('tolovlar')}?m={p.month}"})
 
 
@@ -557,7 +587,7 @@ def payment_receipt(request, pk):
 @require_POST
 def freeze_month(request):
     m = sv.valid_month(request.POST.get("m"))
-    d = sv.Data()
+    d = sv.Data(request.user)
     todo = [s for s in d.students if s.status == "faol" and d.group_of(s) and not d.joined_after(s, m)
             and (s.id, m) not in d.charges]
     if not todo:
@@ -572,7 +602,7 @@ def freeze_month(request):
 # ---------------------------------------------------------------- xarajatlar
 @section_required("xarajatlar")
 def xarajatlar(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     m = month_param(request)
     ex = sorted([x for x in d.expenses if x.month == m], key=lambda x: (x.date, x.created_at), reverse=True)
     inc = d.income(m)
@@ -666,7 +696,7 @@ def task_delete(request, pk):
 # ---------------------------------------------------------------- marketing
 @section_required("marketing")
 def marketing(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     m = month_param(request)
     st = d.src_stats(m)
     tot = {k: sum(x[k] for x in st) for k in ("n", "won", "spend", "rev")}
@@ -778,7 +808,7 @@ def script_delete(request, pk):
 # ---------------------------------------------------------------- hisobotlar
 @section_required("hisobotlar")
 def hisobotlar(request):
-    d = sv.Data()
+    d = sv.Data(request.user)
     m = month_param(request)
     inc, exp = d.income(m), d.month_exp(m)
     c = d.center
@@ -803,7 +833,7 @@ def hisobotlar(request):
     for n in range(-5, 1):
         k = sv.shift_month(m, n)
         i, e = d.income(k), d.month_exp(k)
-        six.append({"label": sv.mlabel(k), "i": i, "e": e, "net": i - e,
+        six.append({"label": sv.mlabel(k), "short": sv.SHORT[int(k[5:]) - 1], "i": i, "e": e, "net": i - e,
                     "n": sum(1 for p in d.payments if p.month == k and not p.refund and p.amount > 0)})
     return render(request, "crm/hisobotlar.html", {
         "section": "hisobotlar", **month_nav(request, m), "inc": inc, "exp": exp, "net": inc - exp,
@@ -813,6 +843,9 @@ def hisobotlar(request):
         "exp_col": "var(--bad)" if c.plan_expense and exp > c.plan_expense else "var(--warn)",
         "exp_over": bool(c.plan_expense and exp > c.plan_expense),
         "rows": rows, "trs": trs, "src": [x for x in d.src_stats(m) if x["n"] or x["spend"]], "six": six,
+        "sal_bars": sorted([{"label": t["name"], "v": t["salary"], "sub": f"tushum {sv.compact(t['income'])}"}
+                            for t in d.teacher_salaries(m)], key=lambda r: -r["v"]),
+        "grp_bars": [{"label": r["g"].name, "v": r["i"], "sub": f"{r['n']} talaba"} for r in rows if r["i"]],
     })
 
 
@@ -851,12 +884,20 @@ def xodimlar(request):
                                          first_name=cd["first_name"], last_name=cd["last_name"])
             Staff.objects.create(user=u, role=cd["role"])
         log(request, f"Xodim qo'shildi: {u.get_full_name() or u.username} ({ROLES[cd['role']]})")
-        messages.success(request, "Xodim qo'shildi")
+        messages.success(request, f"Xodim qo'shildi. Login: {u.username}. Parolni xodimga o'zingiz bering.")
         return redirect("xodimlar")
-    users = User.objects.filter(is_active=True).select_related("staff").order_by("first_name", "username")
-    rows = [{"u": u, "role": role_of(u), "super": u.is_superuser, "me": u == request.user} for u in users]
-    return render(request, "crm/xodimlar.html", {"section": "xodimlar", "form": form, "rows": rows,
-                                                  "roles": Staff.ROLES})
+    users = User.objects.select_related("staff").order_by("-is_active", "first_name", "username")
+    groups = list(Group.objects.all())
+    rows = []
+    for u in users:
+        staff = getattr(u, "staff", None)
+        rows.append({"u": u, "role": role_of(u), "super": u.is_superuser, "me": u == request.user,
+                     "custom": bool(staff and staff.sections and not u.is_superuser),
+                     "secs": [SECTION_LABELS[k] for k in sections_of(u)] if u.is_active else [],
+                     "groups": [g for g in groups if sv.is_my_group(g, u)] if role_of(u) == "oqituvchi" else []})
+    return render(request, "crm/xodimlar.html", {"section": "xodimlar", "form": form, "roles": Staff.ROLES,
+                                                  "rows": [r for r in rows if r["u"].is_active],
+                                                  "inactive": [r for r in rows if not r["u"].is_active]})
 
 
 @section_required("xodimlar")
@@ -872,6 +913,47 @@ def staff_role(request, pk):
 
 
 @section_required("xodimlar")
+def staff_edit(request, pk):
+    u = get_object_or_404(User, pk=pk, is_superuser=False)
+    staff, _ = Staff.objects.get_or_create(user=u)
+    initial = {"first_name": u.first_name, "last_name": u.last_name, "phone": staff.phone, "role": staff.role,
+               "custom": bool(staff.sections), "sections": staff.sections or sections_of(u)}
+    form = StaffEditForm(request.POST or None, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        cd = form.cleaned_data
+        with transaction.atomic():
+            u.first_name, u.last_name = cd["first_name"], cd["last_name"]
+            u.save(update_fields=["first_name", "last_name"])
+            staff.phone, staff.role = cd["phone"], cd["role"]
+            staff.sections = cd["sections"] if cd["custom"] else []
+            staff.save()
+        log(request, f"Xodim o'zgartirildi: {u.get_full_name() or u.username}")
+        messages.success(request, "Saqlandi")
+        return redirect("xodimlar")
+    return render(request, "crm/staff_edit.html", {"section": "xodimlar", "form": form, "u": u, "staff": staff,
+                                                    "pform": ResetPasswordForm(user=u)})
+
+
+@section_required("xodimlar")
+@require_POST
+def staff_password(request, pk):
+    u = get_object_or_404(User, pk=pk, is_superuser=False)
+    form = ResetPasswordForm(request.POST, user=u)
+    if form.is_valid():
+        u.set_password(form.cleaned_data["password"])
+        u.save(update_fields=["password"])
+        log(request, f"Xodim paroli yangilandi: {u.get_full_name() or u.username}")
+        messages.success(request, "Yangi parol o'rnatildi")
+        return redirect("staff_edit", pk=u.pk)
+    staff, _ = Staff.objects.get_or_create(user=u)
+    eform = StaffEditForm(initial={"first_name": u.first_name, "last_name": u.last_name, "phone": staff.phone,
+                                   "role": staff.role, "custom": bool(staff.sections),
+                                   "sections": staff.sections or sections_of(u)})
+    return render(request, "crm/staff_edit.html", {"section": "xodimlar", "form": eform, "u": u, "staff": staff,
+                                                    "pform": form})
+
+
+@section_required("xodimlar")
 @require_POST
 def staff_remove(request, pk):
     u = get_object_or_404(User, pk=pk, is_superuser=False)
@@ -883,6 +965,126 @@ def staff_remove(request, pk):
     log(request, f"Xodim olib tashlandi: {u.get_full_name() or u.username}")
     messages.success(request, "Xodim o'chirildi (kirish bloklandi)")
     return redirect("xodimlar")
+
+
+@section_required("xodimlar")
+@require_POST
+def staff_restore(request, pk):
+    u = get_object_or_404(User, pk=pk, is_superuser=False)
+    u.is_active = True
+    u.save(update_fields=["is_active"])
+    log(request, f"Xodim qayta tiklandi: {u.get_full_name() or u.username}")
+    messages.success(request, "Xodim qayta tiklandi, u yana tizimga kira oladi")
+    return redirect("xodimlar")
+
+
+@login_required
+def password_change(request):
+    form = PasswordChangeForm(request.user, request.POST or None)
+    for f in form.fields.values():
+        f.widget.attrs.pop("autofocus", None)
+    form.fields["old_password"].label = "Hozirgi parol"
+    form.fields["new_password1"].label = "Yangi parol"
+    form.fields["new_password2"].label = "Yangi parol (takror)"
+    form.fields["new_password1"].help_text = "Kamida 8 belgi, faqat raqamdan iborat bo'lmasin"
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        update_session_auth_hash(request, form.user)
+        log(request, "Parol almashtirildi")
+        messages.success(request, "Parolingiz almashtirildi")
+        return redirect("home")
+    form.layout = lambda: [[form["old_password"]], [form["new_password1"], form["new_password2"]]]
+    return form_page(request, form, "Parolni almashtirish", reverse("home"))
+
+
+# ---------------------------------------------------------------- o'qituvchi kabineti
+@section_required("kabinet")
+def kabinet(request):
+    u = request.user
+    teacher = u
+    if is_director(u) or not is_teacher_scoped(u):
+        tid = request.GET.get("t")
+        if not tid and not is_teacher_scoped(u):
+            # direktor/administrator: o'qituvchini tanlash
+            teachers = [x for x in User.objects.filter(is_active=True).select_related("staff")
+                        if role_of(x) == "oqituvchi"]
+            if not teachers:
+                messages.info(request, "Hali o'qituvchi hisobi yo'q. Xodimlar bo'limida qo'shing.")
+                return redirect("xodimlar" if allowed(u, "xodimlar") else home_section(u))
+            tid = teachers[0].pk
+        teacher = get_object_or_404(User, pk=tid, is_active=True)
+    d = sv.Data(None if teacher != u else u)
+    groups = [g for g in d.groups if sv.is_my_group(g, teacher)]
+    cab = sv.cabinet(d, groups)
+    my_tasks = Task.objects.filter(done=False).filter(Q(assignee=teacher) | Q(assignee__isnull=True))
+    others = []
+    if teacher != u:
+        others = [x for x in User.objects.filter(is_active=True).select_related("staff") if role_of(x) == "oqituvchi"]
+    return render(request, "crm/kabinet.html", {
+        "section": "kabinet", "t": teacher, "own": teacher == u, "others": others, "cab": cab,
+        "greet": greet(), "first": first_name(teacher), "today": d.TODAY,
+        "tasks": sorted(my_tasks, key=lambda t: t.due or date.max)[:6],
+    })
+
+
+# ---------------------------------------------------------------- zaxira nusxa
+@section_required("zaxira")
+def zaxira(request):
+    rows = Backup.objects.defer("data")[:30]
+    last = Backup.objects.filter(kind="auto").defer("data").first()
+    return render(request, "crm/zaxira.html", {
+        "section": "zaxira", "rows": rows, "last": last, "form": RestoreForm(),
+        "db_engine": settings.DB_ENGINE, "db_persistent": settings.DB_PERSISTENT,
+    })
+
+
+@section_required("zaxira")
+@require_POST
+def backup_create(request):
+    b = bk.make_backup("manual")
+    log(request, f"Zaxira nusxa olindi: #{b.pk}")
+    messages.success(request, f"Zaxira nusxa olindi: {b.objects_count} ta yozuv")
+    return redirect("zaxira")
+
+
+@section_required("zaxira")
+def backup_download(request, pk=None):
+    if pk:
+        b = get_object_or_404(Backup, pk=pk)
+        blob, stamp = bytes(b.data), timezone.localtime(b.created_at)
+    else:
+        blob, stamp = bk.to_bytes(bk.dump()), timezone.localtime()
+    resp = HttpResponse(blob, content_type="application/gzip")
+    resp["Content-Disposition"] = f'attachment; filename="markaz-zaxira-{stamp:%Y-%m-%d-%H%M}.json.gz"'
+    log(request, "Zaxira fayli yuklab olindi")
+    return resp
+
+
+@section_required("zaxira")
+@require_POST
+def backup_restore(request, pk=None):
+    form = RestoreForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for errs in form.errors.values():
+            messages.error(request, " ".join(errs))
+        return redirect("zaxira")
+    try:
+        if pk:
+            raw = bytes(get_object_or_404(Backup, pk=pk).data)
+        elif form.cleaned_data.get("file"):
+            raw = form.cleaned_data["file"].read()
+        else:
+            messages.error(request, "Zaxira faylini tanlang")
+            return redirect("zaxira")
+        n, pre = bk.restore(bk.load_bytes(raw))
+    except bk.RestoreError as e:
+        messages.error(request, str(e))
+        return redirect("zaxira")
+    if not request.user.is_active or not User.objects.filter(pk=request.user.pk).exists():
+        return redirect("login")
+    log(request, f"Ma'lumotlar zaxiradan tiklandi ({n} yozuv)")
+    messages.success(request, f"Ma'lumotlar tiklandi: {n} ta yozuv. Oldingi holat ham zaxiraga saqlandi.")
+    return redirect("zaxira")
 
 
 @section_required("jurnal")
@@ -901,7 +1103,7 @@ def qidiruv(request):
     q = request.GET.get("q", "").strip()
     ctx = {"section": "qidiruv", "q": q, "short": len(q) < 2}
     if len(q) >= 2:
-        d = sv.Data()
+        d = sv.Data(request.user)
         ql, ph = q.lower(), digits(q)
 
         def hit(*a):
@@ -935,7 +1137,7 @@ def _xlsx_response(wb, filename):
 @money_required
 def export_xlsx(request):
     from openpyxl import Workbook
-    d = sv.Data()
+    d = sv.Data(request.user)
     gn = lambda gid: d.group_map[gid].name if gid in d.group_map else ""
     lead_st, stu_st = dict(Lead.STATUSES), dict(Student.STATUSES)
     sheets = [
@@ -1004,6 +1206,7 @@ def _ik(row, key):
 
 
 @section_required("talabalar")
+@not_teacher
 def import_data(request):
     form = ImportForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():

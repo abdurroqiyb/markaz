@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 
 from . import services as sv
+from .roles import GRANTABLE, SECTION_LABELS
 from .models import (AdSpend, Center, Expense, Grade, Group, Lead, LeadCall, Payment,
                      Promo, Script, Staff, Student, Task)
 
@@ -97,15 +98,23 @@ class StudentForm(StyledModelForm):
 
 
 class GroupForm(StyledModelForm):
-    rows = [["course", "teacher"], ["days", "time"], ["room", "capacity", "teacher_pct"],
-            ["price", "branch"], ["pay_model", "pay_value"], ["start_date", "end_date"]]
+    rows = [["course", "branch"], ["teacher_user", "teacher"], ["days", "time"], ["room", "capacity", "teacher_pct"],
+            ["price"], ["pay_model", "pay_value"], ["start_date", "end_date"]]
     placeholders = {"name": "Ingliz tili A2 · kechki", "days": "Du-Chor-Ju", "time": "18:00-19:30"}
 
     class Meta:
         model = Group
-        fields = ["name", "course", "teacher", "days", "time", "room", "capacity", "teacher_pct",
-                  "price", "branch", "pay_model", "pay_value", "start_date", "end_date"]
+        fields = ["name", "course", "branch", "teacher_user", "teacher", "days", "time", "room", "capacity",
+                  "teacher_pct", "price", "pay_model", "pay_value", "start_date", "end_date"]
         widgets = date_widgets("start_date", "end_date")
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        f = self.fields["teacher_user"]
+        f.queryset = User.objects.filter(is_active=True, is_superuser=False).order_by("first_name", "username")
+        f.label_from_instance = lambda u: u.get_full_name() or u.username
+        f.empty_label = "Tanlanmagan"
+        self.fields["teacher"].help_text = "Hisob tanlansa, bo'sh qoldirsangiz ismi o'zi yoziladi"
 
 
 class MonthField(forms.ChoiceField):
@@ -263,7 +272,7 @@ class StaffCreateForm(StyledMixin, forms.Form):
     last_name = forms.CharField(label="Familiya", max_length=150, required=False)
     username = forms.CharField(label="Login", max_length=150)
     password = forms.CharField(label="Parol", widget=forms.PasswordInput, min_length=8)
-    role = forms.ChoiceField(label="Rol", choices=[c for c in Staff.ROLES])
+    role = forms.ChoiceField(label="Rol", choices=[c for c in Staff.ROLES], initial="oqituvchi")
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
@@ -282,6 +291,56 @@ class StaffCreateForm(StyledMixin, forms.Form):
 
     def layout(self):
         return [[self["first_name"], self["last_name"]], [self["username"], self["password"]], [self["role"]]]
+
+
+class StaffEditForm(StyledMixin, forms.Form):
+    first_name = forms.CharField(label="Ism", max_length=150)
+    last_name = forms.CharField(label="Familiya", max_length=150, required=False)
+    phone = forms.CharField(label="Telefon", max_length=50, required=False)
+    role = forms.ChoiceField(label="Rol", choices=[c for c in Staff.ROLES])
+    custom = forms.BooleanField(label="Bo'limlarni o'zim belgilayman (rol standartidan farqli)", required=False)
+    sections = forms.MultipleChoiceField(label="Ochiq bo'limlar", required=False,
+                                         widget=forms.CheckboxSelectMultiple,
+                                         choices=[(k, SECTION_LABELS[k]) for k in GRANTABLE])
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._style()
+
+    def clean(self):
+        cd = super().clean()
+        if cd.get("custom") and not cd.get("sections"):
+            self.add_error("sections", "Kamida bitta bo'lim belgilang")
+        return cd
+
+
+class ResetPasswordForm(StyledMixin, forms.Form):
+    password = forms.CharField(label="Yangi parol", widget=forms.PasswordInput, min_length=8)
+
+    def __init__(self, *a, user=None, **kw):
+        self.user = user
+        super().__init__(*a, **kw)
+        self._style()
+
+    def clean_password(self):
+        p = self.cleaned_data["password"]
+        validate_password(p, self.user)
+        return p
+
+
+class RestoreForm(StyledMixin, forms.Form):
+    file = forms.FileField(label="Zaxira fayli (.json.gz)", required=False)
+    confirm = forms.CharField(label="Tasdiqlash uchun TIKLASH deb yozing", max_length=20)
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._style()
+
+    def clean_confirm(self):
+        v = self.cleaned_data["confirm"].strip().upper()
+        if v != "TIKLASH":
+            raise forms.ValidationError("TIKLASH so'zini yozing")
+        return v
 
 
 class ImportForm(StyledMixin, forms.Form):

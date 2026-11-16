@@ -1,0 +1,31 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}{{ u.get_full_name|default:u.username }}{% endblock %}
+{% block content %}
+<div class="head"><div><h1>{{ u.get_full_name|default:u.username }}</h1><p class="sub">Login: <b>{{ u.username }}</b></p></div><div class="tools"><a class="btn" href="{% url 'xodimlar' %}">Orqaga</a></div></div>
+<div class="cols">
+<section class="panel"><h2>Ma'lumot va kirish huquqi</h2>
+  <form method="post" novalidate class="stack" id="staffform">{% csrf_token %}
+    <div class="frow">{% for f in form %}{% if f.name == "first_name" or f.name == "last_name" %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endif %}{% endfor %}</div>
+    <div class="frow"><div class="field"><label for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>{{ form.phone }}</div><div class="field"><label for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>{{ form.role }}</div></div>
+    <label class="chkline">{{ form.custom }} <span>{{ form.custom.label }}</span></label>
+    <fieldset class="secgrid{% if form.sections.errors %} has-err{% endif %}" id="secgrid"><legend>{{ form.sections.label }}</legend>
+      {% for c in form.sections %}<label class="secopt">{{ c.tag }}<span>{{ c.choice_label }}</span></label>{% endfor %}
+      {% if form.sections.errors %}<small class="err">{{ form.sections.errors|join:" " }}</small>{% endif %}
+    </fieldset>
+    <p class="mut m0" style="font-size:13px">Belgilanmasa, rol bo'yicha standart bo'limlar ochiq bo'ladi. Xodimlar, jurnal va zaxira faqat direktorga. O'qituvchi har doim faqat o'z guruhlarini ko'radi.</p>
+    <div class="fbtns"><button class="btn primary">Saqlash</button></div>
+  </form>
+</section>
+<section class="panel"><h2>Parolni yangilash</h2>
+  <form method="post" action="{% url 'staff_password' u.pk %}" novalidate class="stack">{% csrf_token %}
+    {% with f=pform.password %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% else %}<small class="help">Kamida 8 belgi. Yangi parolni xodimga o'zingiz yetkazing.</small>{% endif %}</div>{% endwith %}
+    <div class="fbtns"><button class="btn">Parolni o'rnatish</button></div>
+  </form>
+</section>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+(function(){const c=document.getElementById("id_custom"),g=document.getElementById("secgrid");if(!c||!g)return;
+const s=()=>{g.disabled=!c.checked;g.classList.toggle("off",!c.checked)};c.addEventListener("change",s);s()})();
+</script>{% endblock %}
