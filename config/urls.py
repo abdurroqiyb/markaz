@@ -4,6 +4,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 from crm import auth_views as av
+from crm import pwa
 
 urlpatterns = [
     path(f"{settings.ADMIN_URL}login/", av.admin_login_redirect),
@@ -16,5 +17,8 @@ urlpatterns = [
     path("xavfsizlik/2fa/ochirish/", av.twofa_disable, name="twofa_disable"),
     path("xavfsizlik/2fa/<int:pk>/tozalash/", av.twofa_reset, name="twofa_reset"),
     path("xavfsizlik/blokdan-chiqarish/", av.unlock, name="unlock"),
+    path("manifest.webmanifest", pwa.manifest, name="manifest"),
+    path("sw.js", pwa.service_worker, name="sw"),
+    path("oflayn/", pwa.offline, name="offline"),
     path("", include("crm.urls")),
 ]

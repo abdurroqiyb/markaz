@@ -150,6 +150,7 @@ def dashboard(request):
         "spark_students": d.month_series_students(), "spark_leads": d.month_series_leads(),
         "spark_inc": [c["inc"] for c in chart], "spark_exp": [c["exp"] for c in chart],
         "chart": chart, "sources": d.sources(), "funnel": d.funnel(),
+        "series6": d.series6(), "exp_cats": d.expense_cats(d.NOW) if admin else [],
         "group_fill": [fill_item(d, g) for g in d.groups],
         "rate_label": f"{round(rate * 100)}%" if expected else "-",
         "debtors": d.debtors(d.NOW)[:6], "risks": d.risks()[:6], "waiting": d.waiting()[:6],
@@ -424,8 +425,26 @@ def jadval(request):
         items = sorted([g for g in gs if i in sv.parse_days(g.days)], key=lambda g: (sv.parse_time(g.time) or (0,))[0])
         days.append({"name": dn, "today": i == tdy,
                      "items": [{"g": g, "time": sv.time_range(g), "bad": g.id in cf} for g in items]})
+    # Kalendar ko'rinishi: soatlar to'ri, blok balandligi dars davomiyligiga teng.
+    times = [sv.parse_time(g.time) for g in gs if sv.parse_time(g.time)]
+    h0 = min([t[0] // 60 for t in times] + [9]) if times else 9
+    h1 = max([-(-t[1] // 60) for t in times] + [h0 + 4]) if times else 18
+    colors = {g.id: i % 6 for i, g in enumerate(sorted(d.groups, key=lambda g: g.id))}
+    cal = []
+    for day in days:
+        blocks = []
+        for x in day["items"]:
+            t = sv.parse_time(x["g"].time)
+            if not t:
+                continue
+            blocks.append({**x, "top": (t[0] - h0 * 60) / ((h1 - h0) * 60) * 100,
+                           "h": max(4.0, (t[1] - t[0]) / ((h1 - h0) * 60) * 100), "c": colors.get(x["g"].id, 0)})
+        cal.append({"name": day["name"], "short": day["name"][:2], "today": day["today"], "blocks": blocks})
+    view = "kal" if request.GET.get("v") == "kal" else "list"
     return render(request, "crm/jadval.html", {"section": "jadval", "days": days, "conflicts": cf_list,
-                                                "br": br, "branches": branches, "has": bool(gs)})
+                                                "br": br, "branches": branches, "has": bool(gs), "view": view,
+                                                "cal": cal, "hours": [f"{h:02d}:00" for h in range(h0, h1)],
+                                                "nh": h1 - h0})
 
 
 # ---------------------------------------------------------------- davomat
@@ -610,7 +629,8 @@ def xarajatlar(request):
     sal = []
     for t in d.teacher_salaries(m):
         paid = sum(x.amount for x in ex if x.category in ("Maosh", "Avans") and x.teacher == t["name"])
-        sal.append({**t, "paid": paid, "rest": max(0, t["salary"] - paid)})
+        sal.append({**t, "paid": paid, "rest": max(0, t["salary"] - paid),
+                    "pct": min(100, round(paid / t["salary"] * 100)) if t["salary"] else 0})
     return render(request, "crm/xarajatlar.html", {"section": "xarajatlar", **month_nav(request, m), "ex": ex,
                                                     "inc": inc, "ex_sum": ex_sum, "profit": inc - ex_sum, "sal": sal})
 

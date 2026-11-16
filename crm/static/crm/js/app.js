@@ -59,6 +59,21 @@
     pf.elements.student.addEventListener("change",upd);pf.elements.month.addEventListener("change",upd);
   }
 
+  // Tungi / kunduzgi rejim: tanlov brauzerda saqlanadi.
+  const tb=$("#themebtn");
+  if(tb){
+    const cur=()=>document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+    const paint=()=>{const u=tb.querySelector("use");if(u)u.setAttribute("href",cur()==="dark"?"#i-sunny":"#i-moon")};
+    paint();
+    tb.addEventListener("click",()=>{const n=cur()==="dark"?"light":"dark";document.documentElement.dataset.theme=n;
+      try{localStorage.setItem("theme",n)}catch(e){}paint()});
+  }
+
+  // PWA: telefonga ilova kabi o'rnatish uchun service worker.
+  if("serviceWorker" in navigator&&location.protocol==="https:"){
+    addEventListener("load",()=>navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(()=>{}));
+  }
+
   // Xabarlar 6 soniyadan keyin yashiriladi.
   setTimeout(()=>document.querySelectorAll(".msgs .banner.success").forEach(b=>b.remove()),6000);
 })();

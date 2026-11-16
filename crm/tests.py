@@ -333,3 +333,30 @@ class SecurityTest(TestCase):
         self.assertEqual(done, ["telegram"])
         b.refresh_from_db()
         self.assertEqual(b.sent, "telegram")
+
+
+class DesignTest(Base):
+    def test_calendar_pwa_dashboard(self):
+        create_demo()
+        r = self.client.get(reverse("jadval") + "?v=kal")
+        self.assertContains(r, 'class="calev')
+        r = self.client.get(reverse("dashboard"))
+        self.assertContains(r, "Davomat dinamikasi")
+        self.assertContains(r, "To'lov yig'ilishi")
+        m = self.client.get(reverse("manifest")).json()
+        self.assertEqual(m["display"], "standalone")
+        sw = self.client.get(reverse("sw"))
+        self.assertEqual(sw["Service-Worker-Allowed"], "/")
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("offline")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("manifest")).status_code, 200)
+
+    def test_salary_paid_status(self):
+        from .models import Expense
+        g = Group.objects.create(name="A", price=100000, teacher="Ali", pay_model="fixed", pay_value=500000)
+        Student.objects.create(name="S", group=g)
+        m = sv.now_month()
+        Expense.objects.create(title="Avans", category="Avans", amount=200000, month=m, teacher="Ali")
+        r = self.client.get(reverse("xarajatlar"))
+        self.assertContains(r, "Qisman")
+        self.assertContains(r, "300\xa0000")
