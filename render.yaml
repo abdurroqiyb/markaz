@@ -21,6 +21,8 @@ services:
         value: admin@example.com
       - key: DJANGO_SUPERUSER_PASSWORD
         sync: false                  # Render panelida o'zingiz kiritasiz
+      - key: DATABASE_URL
+        sync: false                  # Neon PostgreSQL ulanish satri (bepul, ma'lumotlar saqlanadi)
       - key: WEB_CONCURRENCY
         value: "2"
       # Doimiy disk ulasangiz (pullik tarif), quyidagini oching va pastdagi disk blokini ham:

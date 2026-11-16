@@ -97,16 +97,31 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# SQLite. Render'da doimiy disk ulansa SQLITE_PATH=/var/data/db.sqlite3 qo'ying.
-SQLITE_PATH = os.environ.get("SQLITE_PATH") or str(BASE_DIR / "db.sqlite3")
-Path(SQLITE_PATH).parent.mkdir(parents=True, exist_ok=True)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": SQLITE_PATH,
-        "OPTIONS": {"timeout": 20},
+# Ma'lumotlar bazasi:
+#  - DATABASE_URL berilsa (masalan bepul Neon PostgreSQL), o'sha ishlatiladi;
+#  - aks holda SQLite. Doimiy disk ulansa SQLITE_PATH=/var/data/db.sqlite3 qo'ying.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DATABASE_URL:
+    import dj_database_url
+
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+            conn_health_checks=True,
+            ssl_require=DATABASE_URL.startswith("postgres") and env_bool("DB_SSL_REQUIRE", True),
+        )
     }
-}
+else:
+    SQLITE_PATH = os.environ.get("SQLITE_PATH") or str(BASE_DIR / "db.sqlite3")
+    Path(SQLITE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": SQLITE_PATH,
+            "OPTIONS": {"timeout": 20},
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

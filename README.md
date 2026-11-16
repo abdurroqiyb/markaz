@@ -5,7 +5,7 @@ to'lovlar va qarzdorlik, xarajatlar va o'qituvchi oyligi, marketing (reklama, pr
 hisobotlar, vazifalar, xodimlar va rollar, faoliyat jurnali, Excel import/eksport.
 
 Bitta HTML fayldagi ilova Django MVT asosida qayta yozilgan: ma'lumotlar endi brauzerda emas,
-serverdagi ma'lumotlar bazasida (SQLite) saqlanadi, kirish login/parol bilan.
+serverdagi ma'lumotlar bazasida saqlanadi (standart SQLite, `DATABASE_URL` berilsa PostgreSQL), kirish login/parol bilan.
 
 ## Tuzilma
 
@@ -66,15 +66,26 @@ Render'siz (Blueprint ishlatmasdan) qo'lda yaratsangiz: **New → Web Service**,
 Build Command: `./build.sh`, Start Command: `./start.sh`, va Environment bo'limiga
 `SECRET_KEY` (Generate), `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD` qo'shing.
 
-### Muhim: SQLite va Render free tarifi
+### Ma'lumotlar saqlanib qolishi uchun: bepul Neon PostgreSQL (tavsiya)
 
 Render free tarifida disk **vaqtinchalik**: har deploy yoki qayta ishga tushishda (va 15 daqiqa
-faolsizlikdan keyin uxlab qolganda) `db.sqlite3` o'chib ketadi. Ya'ni kiritilgan ma'lumotlar yo'qoladi.
-Sinab ko'rish uchun yetarli, lekin real ish uchun quyidagilardan birini qiling:
+faolsizlikdan keyin uxlab qolganda) SQLite fayli o'chib ketadi. Buning bepul yechimi: ma'lumotlar
+bazasini tashqi bepul PostgreSQL'da (Neon) saqlash. Ilova `DATABASE_URL` berilsa avtomatik
+PostgreSQL'ga o'tadi, berilmasa SQLite ishlatadi.
 
-- **Doimiy disk** (Starter yoki undan yuqori tarif): `render.yaml` dagi `disk` blokini va
-  `SQLITE_PATH=/var/data/db.sqlite3` qatorini oching. Ma'lumotlar diskda saqlanadi.
-- Yoki keyinchalik PostgreSQL'ga o'tish (sozlamalarda faqat `DATABASES` o'zgaradi).
+1. https://neon.tech saytida ro'yxatdan o'ting (Google yoki GitHub bilan, karta so'ramaydi).
+2. **Create project** bosing. Nomi: `markaz`, Region: **Europe (Frankfurt)** (Render'ga yaqin).
+3. Ochilgan oynada **Connection string** ni nusxalang. U shunday ko'rinadi:
+   `postgresql://neondb_owner:XXXX@ep-xxxx.eu-central-1.aws.neon.tech/neondb?sslmode=require`
+4. Render'da servisingizni oching → **Environment** → **Add Environment Variable**:
+   Key: `DATABASE_URL`, Value: nusxalangan satr → **Save Changes**.
+5. Render avtomatik qayta deploy qiladi. `start.sh` jadvallarni yaratadi va direktor hisobini qo'shadi.
+
+Shundan keyin ma'lumotlar Neon'da saqlanadi va deploy/qayta ishga tushishda yo'qolmaydi.
+Neon bepul tarifi kichik o'quv markaz uchun yetarli (0.5 GB joy).
+
+Boshqa variant: pullik Render tarifida doimiy disk ulash. Buning uchun `render.yaml` dagi `disk`
+blokini va `SQLITE_PATH=/var/data/db.sqlite3` qatorini izohdan chiqaring.
 
 Muntazam zaxira uchun: **Asosiy → Excelga yuklab olish** barcha ma'lumotlarni .xlsx qilib beradi.
 
@@ -86,6 +97,7 @@ Muntazam zaxira uchun: **Asosiy → Excelga yuklab olish** barcha ma'lumotlarni 
 | `DEBUG` | `True`/`False`. Render'da standart `False` |
 | `ALLOWED_HOSTS` | Vergul bilan: `crm.example.uz,localhost` |
 | `CSRF_TRUSTED_ORIGINS` | O'z domeningiz bo'lsa: `https://crm.example.uz` |
+| `DATABASE_URL` | PostgreSQL ulanish satri (masalan Neon). Bo'lsa SQLite o'rniga ishlatiladi |
 | `SQLITE_PATH` | Ma'lumotlar bazasi fayli yo'li (doimiy disk uchun) |
 | `TIME_ZONE` | Standart `Asia/Tashkent` |
 | `DJANGO_SUPERUSER_USERNAME` / `_PASSWORD` / `_EMAIL` | Deployda direktor hisobini yaratish |
