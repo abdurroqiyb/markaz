@@ -1,0 +1,11 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Xarajatlar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Xarajatlar</h1></div><div class="tools">{% include "crm/_monthnav.html" %}<a class="btn primary" href="{% url 'expense_add' %}?m={{ m }}">Xarajat qo'shish</a></div></div>
+<div class="tiles"><div class="tile"><div class="lbl">Tushum</div><div class="num">{{ inc|som }}<small>so'm</small></div></div><div class="tile"><div class="lbl">Xarajat</div><div class="num">{{ ex_sum|som }}<small>so'm</small></div><div class="hint">Reklama xarajati ham kiradi</div></div><div class="tile"><div class="lbl"><span class="ico good">{% icon "trend" %}</span>Sof foyda</div><div class="num {% if profit >= 0 %}good-t{% else %}bad-t{% endif %}">{{ profit|som }}<small>so'm</small></div></div></div>
+<div class="cols">
+  <section class="panel"><h2>O'qituvchi oyligi (hisob)</h2>{% for t in sal %}<div class="mini"><span>{{ t.name }}<br><small class="mut">Guruhlar tushumi: {{ t.income|som }} so'm{% if t.paid %} · yozilgan: {{ t.paid|som }}{% endif %}</small></span><span class="rowact"><span class="money">{{ t.salary|som }}</span><a class="btn sm" href="{% url 'expense_add' %}?m={{ m }}&category=Maosh&title=Oylik:+{{ t.name|urlencode }}&teacher={{ t.name|urlencode }}&amount={{ t.rest }}">Yozish</a><a class="btn sm ghost" href="{% url 'expense_add' %}?m={{ m }}&category=Avans&title=Avans:+{{ t.name|urlencode }}&teacher={{ t.name|urlencode }}">Avans</a></span></div>{% empty %}<p class="mut m0">Guruhga o'qituvchi va ulush (%) kiritilsa, oylik shu yerda hisoblanadi.</p>{% endfor %}</section>
+  <section class="panel"><h2>Xarajatlar ro'yxati</h2>{% for x in ex %}<div class="mini"><span>{{ x.title }}<br><small class="mut">{{ x.date|date:"Y-m-d" }} · {{ x.category }}</small></span><span class="rowact"><span class="money bad-t">{{ x.amount|som }}</span>{% url 'expense_delete' x.pk as du %}{% include "crm/_del.html" with del_url=du %}</span></div>{% empty %}<p class="mut m0">{{ m_label }} oyi uchun xarajat yozilmagan.</p>{% endfor %}</section>
+</div>
+{% endblock %}

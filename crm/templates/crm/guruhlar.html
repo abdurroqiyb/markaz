@@ -1,0 +1,13 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Guruhlar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Guruhlar</h1><p class="sub">Kurslar, o'qituvchilar va dars jadvali</p></div><div class="tools"><a class="btn primary" href="{% url 'group_add' %}">Guruh qo'shish</a></div></div>
+{% include "crm/p/branches.html" %}
+{% if not total %}<div class="empty"><h2>Hali guruh yo'q</h2><p>Guruh nomi, o'qituvchi, dars kunlari va oylik narxini kiriting. To'lovlar shu narx bo'yicha hisoblanadi.</p></div>
+{% else %}
+<div class="cards">{% for r in rows %}{% with g=r.g %}<article class="gcard"><div class="gtop"><div style="min-width:0"><h3>{{ g.name }}</h3>{% if g.branch %}<span class="pill info">{{ g.branch }}</span>{% endif %}{% if r.conflict %} <span class="pill bad">Jadval to'qnashuvi</span>{% endif %}</div>{% ring r.p 58 7 r.col r.label %}</div>
+  <dl><dt>Kurs</dt><dd>{{ g.course|default:"-" }}</dd><dt>O'qituvchi</dt><dd>{{ g.teacher|default:"-" }}</dd><dt>Jadval</dt><dd>{% if g.days or g.time %}{{ g.days }}{% if g.days and g.time %}, {% endif %}{{ g.time }}{% else %}-{% endif %}</dd><dt>Xona</dt><dd>{{ g.room|default:"-" }}</dd>{% if can_money %}<dt>Narx</dt><dd class="money">{{ g.price|som }} so'm / oy</dd>{% endif %}<dt>Talabalar</dt><dd>{{ r.n }}{% if g.capacity %} / {{ g.capacity }}{% endif %}{% if r.wl %} · navbatda {{ r.wl }}{% endif %}</dd>{% if g.end_date %}<dt>Tugashi</dt><dd>{{ g.end_date|date:"Y-m-d" }}</dd>{% endif %}</dl>
+  <div class="acts"><a class="btn sm ghost" href="{% url 'talabalar' %}?g={{ g.pk }}">Talabalar</a><a class="btn sm ghost" href="{% url 'group_edit' g.pk %}">Tahrirlash</a>{% url 'group_delete' g.pk as du %}{% include "crm/_del.html" with del_url=du %}</div></article>{% endwith %}{% endfor %}</div>
+{% endif %}
+{% endblock %}

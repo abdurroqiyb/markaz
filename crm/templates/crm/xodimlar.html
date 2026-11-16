@@ -1,0 +1,29 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Xodimlar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Xodimlar va rollar</h1><p class="sub">Kim nimani ko'rishini belgilang</p></div><div class="tools"><a class="btn" href="{% url 'admin:index' %}">Admin panel</a></div></div>
+<div class="cols">
+  <section class="panel"><h2>Xodim qo'shish</h2>
+    <form method="post" novalidate class="stack">{% csrf_token %}
+      {% if form.non_field_errors %}<div class="banner error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+      {% for row in form.layout %}<div class="frow">{% for f in row %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endfor %}</div>{% endfor %}
+      <div class="fbtns"><button class="btn primary">Qo'shish</button></div>
+    </form>
+  </section>
+  <section class="panel"><h2>Rollar</h2>
+    <div class="mini"><span><b>Direktor</b><br><small class="mut">Hamma narsa: pul, xarajat, hisobot, jurnal, xodimlar. Superuser hisobi direktor hisoblanadi.</small></span></div>
+    <div class="mini"><span><b>Administrator</b><br><small class="mut">Lid, talaba, guruh, jadval, davomat, to'lov, vazifa.</small></span></div>
+    <div class="mini"><span><b>O'qituvchi</b><br><small class="mut">Jadval, davomat, baho, talabalar (pulsiz), vazifa. Rol berilmagan xodim ham shu rolda.</small></span></div>
+    <div class="mini"><span><b>Marketolog</b><br><small class="mut">Lid, sinov darsi, marketing, vazifa, jadval.</small></span></div>
+  </section>
+</div>
+<section class="panel"><h2>Xodimlar ro'yxati</h2>
+  {% for r in rows %}<div class="mini"><span class="rowact">{% avatar r.u.get_full_name|default:r.u.username %}<span>{{ r.u.get_full_name|default:r.u.username }}<br><small class="mut">{{ r.u.username }}{% if r.me %} · siz{% endif %}</small></span></span>
+    <span class="rowact">{% if r.super %}<span class="pill info">Direktor (superuser)</span>{% else %}
+      <form method="post" action="{% url 'staff_role' r.u.pk %}" class="inl" data-autosubmit>{% csrf_token %}<select class="pillsel" name="role" aria-label="Rol">{% for k, t in roles %}<option value="{{ k }}"{% if r.role == k %} selected{% endif %}>{{ t }}</option>{% endfor %}</select><noscript><button class="btn sm">OK</button></noscript></form>
+      {% if not r.me %}{% url 'staff_remove' r.u.pk as du %}{% include "crm/_del.html" with del_url=du del_label="Olib tashlash" %}{% endif %}
+    {% endif %}</span></div>{% endfor %}
+</section>
+<p class="mut m0" style="font-size:13px">Parolni almashtirish va boshqa sozlamalar uchun Admin paneldan foydalaning. Olib tashlangan xodim tizimga kira olmaydi, lekin uning yozuvlari saqlanadi.</p>
+{% endblock %}

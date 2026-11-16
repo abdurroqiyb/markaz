@@ -1,0 +1,16 @@
+{% extends "crm/base.html" %}
+{% block title %}Bugun{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Bugungi ish</h1><p class="sub">{{ greet }}{% if first %}, {{ first }}{% endif %}. Rol: {{ role }}</p></div></div>
+<div class="cols">
+  {% include "crm/p/lessons_today.html" %}
+  {% include "crm/p/mytasks.html" %}
+  {% if lead_ok %}{% include "crm/p/reminders.html" %}{% include "crm/p/trials.html" %}{% endif %}
+  {% include "crm/p/bdays.html" %}
+  {% if can_money %}
+    {% include "crm/p/debtors.html" with debt_title="Qarzdorlar" %}
+    {% include "crm/p/returning.html" %}
+    {% include "crm/p/ending.html" %}
+  {% endif %}
+</div>
+{% endblock %}

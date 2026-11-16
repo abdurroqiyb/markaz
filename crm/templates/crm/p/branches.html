@@ -1,0 +1,1 @@
+{% load crm_tags %}{% if branches %}<div class="chips"><a class="chip" href="{% qs br='' %}" aria-pressed="{% if not br %}true{% else %}false{% endif %}">Barcha filiallar</a>{% for b in branches %}<a class="chip" href="{% qs br=b %}" aria-pressed="{% if br == b %}true{% else %}false{% endif %}">{{ b }}</a>{% endfor %}</div>{% endif %}

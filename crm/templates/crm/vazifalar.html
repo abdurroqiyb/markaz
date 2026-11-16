@@ -1,0 +1,18 @@
+{% extends "crm/base.html" %}
+{% block title %}Vazifalar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Vazifalar</h1><p class="sub">{% if late %}{{ late }} ta vazifa muddatidan o'tgan{% else %}Jamoa vazifalari{% endif %}</p></div><div class="tools"><a class="btn primary" href="{% url 'task_add' %}">Vazifa qo'shish</a></div></div>
+<div class="chips">
+  <a class="chip" href="?f=mine" aria-pressed="{% if f == 'mine' %}true{% else %}false{% endif %}">Menga</a>
+  <a class="chip" href="?f=all" aria-pressed="{% if f == 'all' %}true{% else %}false{% endif %}">Hammasi</a>
+  <a class="chip" href="?f=done" aria-pressed="{% if f == 'done' %}true{% else %}false{% endif %}">Bajarilgan</a>
+</div>
+{% if not rows %}<div class="empty"><h2>{% if f == "done" %}Bajarilgan vazifa yo'q{% else %}Vazifa yo'q{% endif %}</h2>{% if f != "done" %}<p>Qo'ng'iroq, hisobot yoki boshqa ishlarni vazifa qilib yozing, mas'ul odam va muddatni belgilang.</p>{% endif %}</div>
+{% else %}
+<div class="list">{% for t in rows %}<article class="item{% if t.done %} done{% endif %}"><div class="item-main">
+  <form method="post" action="{% url 'task_toggle' t.pk %}" class="chkform">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="chk" aria-pressed="{{ t.done|yesno:'true,false' }}" aria-label="Bajarildi">{% if t.done %}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>{% endif %}</button></form>
+  <h3>{{ t.title }}</h3><p>{% if t.assignee %}{{ t.assignee.get_full_name|default:t.assignee.username }}{% else %}Hamma uchun{% endif %}{% if t.note %} · {{ t.note }}{% endif %}</p>
+  {% if t.due and not t.done %}<p><span class="pill {% if t.due < today %}bad{% elif t.due == today %}warn{% else %}info{% endif %}">{% if t.due < today %}Muddati o'tgan: {% else %}Muddat: {% endif %}{{ t.due|date:"Y-m-d" }}</span></p>{% endif %}
+</div><div class="item-side">{% url 'task_delete' t.pk as du %}{% include "crm/_del.html" with del_url=du del_next=request.get_full_path %}</div></article>{% endfor %}</div>
+{% endif %}
+{% endblock %}

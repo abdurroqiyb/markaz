@@ -1,0 +1,11 @@
+{% extends "crm/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="formwrap">
+<div class="formcard doccard">
+  <h2>{{ title }}</h2>
+  <pre id="doctext">{{ text }}</pre>
+  <div class="fbtns noprint"><a class="btn" href="{{ cancel }}">Yopish</a><button type="button" class="btn" onclick="window.print()">Chop etish</button><button type="button" class="btn primary" data-copy="#doctext">Nusxalash</button></div>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "crm/base.html" %}
+{% block title %}Dars jadvali{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Dars jadvali</h1><p class="sub">Haftalik jadval, xona va o'qituvchi to'qnashuvlari bilan</p></div></div>
+{% include "crm/p/branches.html" %}
+{% if not has %}<div class="empty"><h2>Jadval bo'sh</h2><p>Guruhga dars kunlari (masalan Du-Chor-Ju) va vaqtini (18:00-19:30) kiriting, jadval shu yerda chiqadi.</p></div>
+{% else %}
+{% if conflicts %}<div class="banner error">To'qnashuvlar: {{ conflicts|join:"; " }}</div>{% endif %}
+<div class="sched">{% for day in days %}<section class="day{% if day.today %} today{% endif %}"><h2>{{ day.name }}{% if day.today %} <span class="pill info">Bugun</span>{% endif %}</h2>
+  {% for x in day.items %}<div class="slot{% if x.bad %} bad{% endif %}"><b>{{ x.time }}</b><span>{{ x.g.name }}</span><small>{{ x.g.teacher }}{% if x.g.teacher and x.g.room %} · {% endif %}{{ x.g.room }}</small></div>{% empty %}<p class="none">Dars yo'q</p>{% endfor %}</section>{% endfor %}</div>
+{% endif %}
+{% endblock %}

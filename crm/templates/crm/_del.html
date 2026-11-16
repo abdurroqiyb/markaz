@@ -1,0 +1,1 @@
+<form method="post" action="{{ del_url }}" class="inl">{% csrf_token %}{% if del_next %}<input type="hidden" name="next" value="{{ del_next }}">{% endif %}<button type="submit" class="btn sm ghost danger" data-confirm>{{ del_label|default:"O'chirish" }}</button></form>

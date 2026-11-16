@@ -1,0 +1,75 @@
+from django.urls import path
+
+from . import views as v
+
+urlpatterns = [
+    path("", v.home, name="home"),
+    path("bugun/", v.bugun, name="bugun"),
+    path("asosiy/", v.dashboard, name="dashboard"),
+    path("markaz/", v.center_edit, name="center_edit"),
+    path("eksport/", v.export_xlsx, name="export_xlsx"),
+    path("import/", v.import_data, name="import_data"),
+    path("import/shablon/", v.import_template, name="import_template"),
+    path("namuna/yuklash/", v.seed, name="seed"),
+    path("namuna/ochirish/", v.unseed, name="unseed"),
+
+    path("lidlar/", v.lidlar, name="lidlar"),
+    path("lidlar/yangi/", v.lead_form, name="lead_add"),
+    path("lidlar/<int:pk>/", v.lead_form, name="lead_edit"),
+    path("lidlar/<int:pk>/ochirish/", v.lead_delete, name="lead_delete"),
+    path("lidlar/<int:pk>/holat/", v.lead_status, name="lead_status"),
+    path("lidlar/<int:pk>/tarix/", v.lead_log, name="lead_log"),
+    path("lidlar/<int:pk>/talabaga/", v.lead_to_student, name="lead_to_student"),
+
+    path("talabalar/", v.talabalar, name="talabalar"),
+    path("talabalar/yangi/", v.student_form, name="student_add"),
+    path("talabalar/<int:pk>/", v.student_profile, name="student_profile"),
+    path("talabalar/<int:pk>/tahrir/", v.student_form, name="student_edit"),
+    path("talabalar/<int:pk>/ochirish/", v.student_delete, name="student_delete"),
+    path("talabalar/<int:pk>/faollashtirish/", v.student_activate, name="student_activate"),
+    path("talabalar/<int:pk>/hujjat/<str:kind>/", v.student_doc, name="student_doc"),
+    path("talabalar/<int:pk>/baho/", v.grade_add, name="grade_add"),
+    path("baholar/<int:pk>/ochirish/", v.grade_delete, name="grade_delete"),
+
+    path("guruhlar/", v.guruhlar, name="guruhlar"),
+    path("guruhlar/yangi/", v.group_form, name="group_add"),
+    path("guruhlar/<int:pk>/", v.group_form, name="group_edit"),
+    path("guruhlar/<int:pk>/ochirish/", v.group_delete, name="group_delete"),
+    path("jadval/", v.jadval, name="jadval"),
+    path("davomat/", v.davomat, name="davomat"),
+
+    path("tolovlar/", v.tolovlar, name="tolovlar"),
+    path("tolovlar/yangi/", v.payment_add, name="payment_add"),
+    path("tolovlar/<int:pk>/ochirish/", v.payment_delete, name="payment_delete"),
+    path("tolovlar/<int:pk>/qaytarish/", v.payment_refund, name="payment_refund"),
+    path("tolovlar/<int:pk>/kvitansiya/", v.payment_receipt, name="payment_receipt"),
+    path("tolovlar/hisoblash/", v.freeze_month, name="freeze_month"),
+    path("api/qarz/", v.api_debt, name="api_debt"),
+
+    path("xarajatlar/", v.xarajatlar, name="xarajatlar"),
+    path("xarajatlar/yangi/", v.expense_add, name="expense_add"),
+    path("xarajatlar/<int:pk>/ochirish/", v.expense_delete, name="expense_delete"),
+
+    path("vazifalar/", v.vazifalar, name="vazifalar"),
+    path("vazifalar/yangi/", v.task_add, name="task_add"),
+    path("vazifalar/<int:pk>/belgi/", v.task_toggle, name="task_toggle"),
+    path("vazifalar/<int:pk>/ochirish/", v.task_delete, name="task_delete"),
+
+    path("marketing/", v.marketing, name="marketing"),
+    path("marketing/reklama/", v.ad_add, name="ad_add"),
+    path("marketing/reklama/<int:pk>/ochirish/", v.ad_delete, name="ad_delete"),
+    path("marketing/promo/", v.promo_add, name="promo_add"),
+    path("marketing/promo/<int:pk>/belgi/", v.promo_toggle, name="promo_toggle"),
+    path("marketing/promo/<int:pk>/ochirish/", v.promo_delete, name="promo_delete"),
+    path("marketing/bonus/<int:pk>/", v.referral_paid, name="referral_paid"),
+    path("marketing/skript/", v.script_add, name="script_add"),
+    path("marketing/skript/<int:pk>/ochirish/", v.script_delete, name="script_delete"),
+
+    path("hisobotlar/", v.hisobotlar, name="hisobotlar"),
+    path("hisobotlar/reja/", v.plan_edit, name="plan_edit"),
+    path("xodimlar/", v.xodimlar, name="xodimlar"),
+    path("xodimlar/<int:pk>/rol/", v.staff_role, name="staff_role"),
+    path("xodimlar/<int:pk>/ochirish/", v.staff_remove, name="staff_remove"),
+    path("jurnal/", v.jurnal, name="jurnal"),
+    path("qidiruv/", v.qidiruv, name="qidiruv"),
+]

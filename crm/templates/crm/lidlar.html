@@ -1,0 +1,25 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Lidlar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Lidlar</h1><p class="sub">Yangi so'rovlar va ularning holati</p></div>
+<div class="tools">
+  <form method="get" class="inl searchform"><input type="hidden" name="f" value="{{ f }}"><input type="hidden" name="v" value="{{ v }}"><input name="q" class="search" type="search" placeholder="Qidirish" value="{{ q }}" aria-label="Qidirish" data-live></form>
+  <div class="viewtog" role="group" aria-label="Ko'rinish"><a href="{% qs v='list' %}" aria-pressed="{% if v != 'board' %}true{% else %}false{% endif %}">Ro'yxat</a><a href="{% qs v='board' %}" aria-pressed="{% if v == 'board' %}true{% else %}false{% endif %}">Doska</a></div>
+  <a class="btn" href="{% url 'import_data' %}">Excel'dan import</a>
+  <a class="btn primary" href="{% url 'lead_add' %}">Lid qo'shish</a>
+</div></div>
+<div class="chips">{% for k, t, n in chips %}<a class="chip" href="{% qs f=k %}" aria-pressed="{% if f == k %}true{% else %}false{% endif %}">{{ t }}{% if n is not None %} {{ n }}{% endif %}</a>{% endfor %}</div>
+{% if not rows %}
+  <div class="empty"><h2>{% if total %}Topilmadi{% else %}Hali lid yo'q{% endif %}</h2><p>{% if total %}Filtrni o'zgartirib ko'ring.{% else %}Instagram, Telegram yoki telefon orqali kelgan so'rovlarni shu yerga yozing.{% endif %}</p></div>
+{% elif v == "board" %}
+  <div class="board">{% for col in board %}<section class="bcol"><h2>{{ col.t }}<span class="pill {{ col.cls }}">{{ col.rows|length }}</span></h2>
+    {% for l in col.rows %}<article class="kcard"><div class="kname">{% avatar l.name %}<b>{{ l.name }}</b></div><p>{{ l.phone }}{% if l.course %} · {{ l.course }}{% endif %} · {{ l.source }}</p>{% include "crm/p/lead_due.html" %}{% include "crm/p/lead_status.html" %}<div class="acts"><a class="btn sm" href="{% url 'lead_log' l.pk %}">Tarix ({{ l.calls.all|length }})</a><a class="btn sm ghost" href="{% url 'lead_edit' l.pk %}?next={{ request.get_full_path|urlencode }}">Tahrirlash</a></div></article>
+    {% empty %}<p class="none">Bo'sh</p>{% endfor %}</section>{% endfor %}</div>
+{% else %}
+  <div class="list">{% for l in rows %}<article class="item"><div class="item-main"><h3>{% avatar l.name %}{{ l.name }}</h3><p>{{ l.phone }}{% if l.course %} · {{ l.course }}{% endif %} · {{ l.source }}</p>{% include "crm/p/lead_due.html" %}{% if l.note %}<p class="note">{{ l.note }}</p>{% endif %}</div>
+    <div class="item-side">{% include "crm/p/lead_status.html" %}
+      <div class="acts">{% if l.status != "yozildi" %}<a class="btn sm primary" href="{% url 'lead_to_student' l.pk %}">Talabaga aylantirish</a>{% endif %}<a class="btn sm" href="{% url 'lead_log' l.pk %}">Aloqa tarixi ({{ l.calls.all|length }})</a><a class="btn sm ghost" href="{% url 'lead_edit' l.pk %}?next={{ request.get_full_path|urlencode }}">Tahrirlash</a>{% url 'lead_delete' l.pk as du %}{% include "crm/_del.html" with del_url=du del_next=request.get_full_path %}</div>
+    </div></article>{% endfor %}</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}To'lovlar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>To'lovlar</h1></div><div class="tools">{% include "crm/_monthnav.html" %}
+  {% if admin %}<form method="post" action="{% url 'freeze_month' %}" class="inl">{% csrf_token %}<input type="hidden" name="m" value="{{ m }}"><button class="btn" title="Joriy narx va chegirmalarni shu oy uchun qotiradi">{% if frozen %}Yangi talabalarni hisoblash{% else %}Oyni hisoblash{% endif %}</button></form>{% endif %}
+  <a class="btn primary" href="{% url 'payment_add' %}?m={{ m }}">To'lov qabul qilish</a></div></div>
+<div class="tiles">
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "wallet" %}</span>Tushum</div><div class="num">{{ total|som }}<small>so'm</small></div><div class="hint">{{ pays|length }} ta to'lov{% if expected %} · reja {{ expected|som }}{% endif %}</div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "trend" %}</span>Reja bajarilishi</div><div class="ringrow">{% if expected %}{% ring rate 64 8 "var(--accent)" rate_label %}{% else %}{% ring 0 64 8 "var(--accent)" "-" %}{% endif %}<div class="hint">{% if frozen %}Oy hisoblangan{% else %}Hisob joriy narx bo'yicha{% endif %}</div></div></div>
+  <div class="tile"><div class="lbl"><span class="ico bad">{% icon "alert" %}</span>Oy qarzi</div><div class="num">{{ dsum|som }}<small>so'm</small></div><div class="hint">{{ debtors|length }} ta talaba</div></div>
+  <div class="tile"><div class="lbl"><span class="ico warn">{% icon "receipt" %}</span>Bugungi kassa</div><div class="num">{{ today_sum|som }}<small>so'm</small></div><div class="hint">{{ today|date:"Y-m-d" }}</div></div>
+</div>
+<div class="cols">
+  <section class="panel"><div class="head" style="margin-bottom:12px"><h2 class="m0">Oy qarzdorlari</h2>{% if debtors %}<button type="button" class="btn sm" data-copy="#debttext">Eslatma matnini nusxalash</button><textarea id="debttext" hidden>{{ debt_text }}</textarea>{% endif %}</div>
+    {% for x in debtors %}<div class="mini"><span>{{ x.s.name }}<br><small class="mut">{{ x.g.name }}</small></span><span class="rowact"><span class="money bad-t">{{ x.debt|som }}</span><a class="btn sm" href="{% url 'payment_add' %}?student={{ x.s.pk }}&m={{ m }}">To'lov</a></span></div>{% empty %}<p class="mut m0">Bu oy hamma to'lagan.</p>{% endfor %}</section>
+  <section class="panel"><h2>Umumiy qarz (barcha oylar)</h2>{% for x in allrows %}<div class="mini"><span>{{ x.s.name }}<br><small class="mut">{% if x.od %}{{ x.od }} oy kechikkan{% else %}Faqat joriy oy{% endif %}</small></span><span class="money bad-t">{{ x.t|som }}</span></div>{% empty %}<p class="mut m0">Qarzi bor talaba yo'q.</p>{% endfor %}</section>
+  <section class="panel"><h2>Kassa: to'lov turi bo'yicha</h2>{% for n, v, w in meth %}<div class="bar-row wide"><span>{{ n }}</span><div class="bar"><i style="width:{{ w|floatformat:1 }}%"></i></div><b>{{ v|som }}</b></div>{% endfor %}</section>
+  <section class="panel"><h2>Qabul qilingan to'lovlar</h2>{% for x in pays %}{% with p=x.p %}<div class="mini"><span>{{ x.s.name|default:"O'chirilgan talaba" }}<br><small class="mut">{{ p.date|date:"Y-m-d" }} · {{ p.method }}{% if p.refund %} · qaytarish{% if p.note %}: {{ p.note }}{% endif %}{% endif %}</small></span><span class="rowact"><span class="money {% if p.amount < 0 %}bad-t{% else %}good-t{% endif %}">{{ p.amount|som }}</span><a class="btn sm ghost" href="{% url 'payment_receipt' p.pk %}">Kvitansiya</a>{% if admin and p.amount > 0 and not p.refund %}<a class="btn sm ghost" href="{% url 'payment_refund' p.pk %}">Qaytarish</a>{% endif %}{% url 'payment_delete' p.pk as du %}{% include "crm/_del.html" with del_url=du del_next=request.get_full_path %}</span></div>{% endwith %}{% empty %}<p class="mut m0">{{ m_label }} oyi uchun to'lov yo'q.</p>{% endfor %}</section>
+</div>
+{% endblock %}

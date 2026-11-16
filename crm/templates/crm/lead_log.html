@@ -1,0 +1,14 @@
+{% extends "crm/base.html" %}
+{% block title %}{{ lead.name }}: aloqa tarixi{% endblock %}
+{% block content %}
+<div class="formwrap">
+<form method="post" class="formcard" novalidate>
+  {% csrf_token %}
+  <h2>{{ lead.name }}: aloqa tarixi</h2>
+  <p class="mut m0">{{ lead.phone }}{% if lead.course %} · {{ lead.course }}{% endif %} · {{ lead.get_status_display }}</p>
+  <div>{% for c in calls %}<div class="logi"><small>{{ c.date|date:"Y-m-d" }}</small><br>{{ c.text|linebreaksbr }}</div>{% empty %}<p class="mut m0">Hali aloqa yozilmagan.</p>{% endfor %}</div>
+  {% for f in form %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endfor %}
+  <div class="fbtns"><a class="btn" href="{% url 'lidlar' %}">Yopish</a><button type="submit" class="btn primary">Yozuvni saqlash</button></div>
+</form>
+</div>
+{% endblock %}

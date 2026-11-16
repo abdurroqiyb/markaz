@@ -1,0 +1,29 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Davomat{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Davomat</h1><p class="sub">Har dars bo'yicha kelgan va kelmaganlarni belgilang</p></div></div>
+{% if no_groups %}<div class="empty"><h2>Avval guruh yarating</h2><p>Davomat guruh bo'yicha olinadi.</p></div>
+{% else %}
+<form method="get" class="tools" data-autosubmit>
+  <div style="flex:1 1 220px"><select name="g" aria-label="Guruh">{% for x in groups %}<option value="{{ x.pk }}"{% if x.pk == g.pk %} selected{% endif %}>{{ x.name }}</option>{% endfor %}</select></div>
+  <div style="flex:0 0 170px"><input name="d" type="date" value="{{ day|date:'Y-m-d' }}" aria-label="Dars sanasi"></div>
+  <noscript><button class="btn">Ko'rsatish</button></noscript>
+</form>
+{% if not rows %}<div class="empty"><h2>Bu guruhda faol talaba yo'q</h2><p>Talabalar bo'limida talabani shu guruhga biriktiring.</p></div>
+{% else %}
+<div class="tiles"><div class="tile"><div class="lbl">Keldi</div><div class="num good-t">{{ cnt.keldi }}</div></div><div class="tile"><div class="lbl">Sababli</div><div class="num warn-t">{{ cnt.sababli }}</div></div><div class="tile"><div class="lbl">Kelmadi</div><div class="num bad-t">{{ cnt.kelmadi }}</div></div><div class="tile"><div class="lbl">Belgilanmagan</div><div class="num">{{ none }}</div></div></div>
+<form method="post" class="panel">{% csrf_token %}<input type="hidden" name="g" value="{{ g.pk }}"><input type="hidden" name="d" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="action" value="text">
+  <h2>Dars mavzusi va uy vazifasi</h2>
+  <div class="frow"><div class="field"><label for="atopic">Mavzu</label><input id="atopic" name="topic" value="{{ lesson.topic|default:'' }}" placeholder="Bugun nima o'tildi?"></div><div class="field"><label for="ahw">Uy vazifasi</label><input id="ahw" name="homework" value="{{ lesson.homework|default:'' }}" placeholder="Vazifa"></div></div>
+  <div class="fbtns"><button class="btn sm">Saqlash</button></div>
+</form>
+<form method="post" id="attform">{% csrf_token %}<input type="hidden" name="g" value="{{ g.pk }}"><input type="hidden" name="d" value="{{ day|date:'Y-m-d' }}">
+  <div class="tools" style="justify-content:space-between;margin-bottom:10px"><p class="sub m0 mut">{{ g.days }} {{ g.time }}</p><span class="tools"><button class="btn" name="action" value="all">Hammasi keldi</button><button class="btn primary" name="action" value="marks">Davomatni saqlash</button></span></div>
+  <div class="list">{% for r in rows %}<article class="item"><div class="item-main"><h3>{% avatar r.s.name %}{{ r.s.name }}</h3><p>{{ m_label }}: {{ r.came }} / {{ r.tot }} darsda qatnashdi</p></div>
+    <div class="seg" role="radiogroup" aria-label="Davomat">{% for k, t in att %}<label class="segb {{ k }}"><input type="radio" name="s{{ r.s.pk }}" value="{{ k }}"{% if r.mark == k %} checked{% endif %}>{{ t }}</label>{% endfor %}</div></article>{% endfor %}</div>
+</form>
+{% if heat %}<section class="panel"><h2>Davomat xaritasi (oxirgi {{ heat_n }} dars)</h2><div class="heatwrap">{% for h in heat %}<div class="hrow"><span class="hname">{{ h.s.name }}</span><span class="hcells">{% for c in h.cells %}<i class="hc {{ c.v }}" title="{{ c.t }}"></i>{% endfor %}</span></div>{% endfor %}</div><div class="legend"><span><i style="background:var(--good)"></i>Keldi</span><span><i style="background:var(--warn)"></i>Sababli</span><span><i style="background:var(--bad)"></i>Kelmadi</span><span><i style="background:var(--mute-soft)"></i>Belgilanmagan</span></div></section>{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

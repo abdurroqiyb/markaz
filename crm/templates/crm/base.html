@@ -1,0 +1,35 @@
+{% load static crm_tags %}<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{% block title %}{{ center.name|default:"Markaz CRM" }}{% endblock %} · Markaz CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="{% static 'crm/css/app.css' %}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B59E6'/%3E%3Ctext x='16' y='22' font-family='Arial' font-weight='800' font-size='18' fill='white' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+{% include "crm/_icons.html" %}
+{% if user.is_authenticated %}
+<aside class="side">
+  <div class="brand"><span class="mark">M</span><div>Markaz CRM<small>{{ center.name|default:"O'quv markaz boshqaruvi" }}</small></div></div>
+  <nav class="nav" aria-label="Bo'limlar">
+    {% for n in nav %}<a href="{% url n.key %}"{% if section == n.key %} aria-current="page"{% endif %}>{% icon n.icon %}<span>{{ n.label }}</span></a>{% endfor %}
+  </nav>
+  <div class="me">
+    <span>{{ user.get_full_name|default:user.username }}<small>{{ my_role_label }}</small></span>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sm ghost melogout" type="submit">Chiqish</button></form>
+  </div>
+</aside>
+{% endif %}
+<main class="wrap{% if not user.is_authenticated %} solo{% endif %}" id="main">
+  {% if messages %}<div class="msgs">{% for m in messages %}<div class="banner {{ m.tags }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<div id="toast" hidden role="status"></div>
+<script src="{% static 'crm/js/charts.js' %}"></script>
+<script src="{% static 'crm/js/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

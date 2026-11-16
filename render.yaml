@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: markaz-crm
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: ./start.sh
+    healthCheckPath: /kirish/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SECRET_KEY
+        generateValue: true          # Render tasodifiy kalitni o'zi yaratadi
+      - key: DEBUG
+        value: "False"
+      - key: TIME_ZONE
+        value: Asia/Tashkent
+      - key: DJANGO_SUPERUSER_USERNAME
+        value: admin
+      - key: DJANGO_SUPERUSER_EMAIL
+        value: admin@example.com
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false                  # Render panelida o'zingiz kiritasiz
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Doimiy disk ulasangiz (pullik tarif), quyidagini oching va pastdagi disk blokini ham:
+      # - key: SQLITE_PATH
+      #   value: /var/data/db.sqlite3
+    # disk:
+    #   name: markaz-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

@@ -1,0 +1,1 @@
+<section class="panel"><h2>Aloqa eslatmalari</h2>{% for l in due_leads %}<div class="mini"><span>{{ l.name }}<br><small class="mut">{{ l.phone }}</small></span><span class="pill {% if l.next_contact < d.TODAY %}bad{% else %}warn{% endif %}">{{ l.next_contact|date:"Y-m-d" }}</span></div>{% empty %}<p class="mut m0">Bugun aloqa qilinadigan lid yo'q.</p>{% endfor %}</section>

@@ -1,0 +1,7 @@
+{% extends "crm/base.html" %}
+{% block title %}Faoliyat jurnali{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Faoliyat jurnali</h1><p class="sub">Kim nimani qo'shgan, o'zgartirgan yoki o'chirgan (oxirgi 200 yozuv)</p></div></div>
+{% if not rows %}<div class="empty"><h2>Jurnal hozircha bo'sh</h2><p>Xodimlar ma'lumot qo'shgan yoki o'chirgan sari shu yerda ko'rinadi.</p></div>
+{% else %}<div class="panel">{% for x in rows %}<div class="mini"><span>{{ x.text }}<br><small class="mut">{{ x.user.get_full_name|default:x.user.username|default:"Tizim" }}</small></span><span class="mut" style="white-space:nowrap;font-size:12px">{{ x.at|date:"d.m H:i" }}</span></div>{% endfor %}</div>{% endif %}
+{% endblock %}

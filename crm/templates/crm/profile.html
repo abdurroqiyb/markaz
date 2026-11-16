@@ -1,0 +1,39 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}{{ s.name }}{% endblock %}
+{% block content %}
+<div class="formwrap wide">
+<div class="formcard">
+  <div class="phead">{% avatar s.name %}<div><h2>{{ s.name }}</h2><p>{% if s.phone or s.parent %}{{ s.phone }}{% if s.phone and s.parent %} · {% endif %}{% if s.parent %}Ota-ona: {{ s.parent }}{% endif %}{% else %}Telefon kiritilmagan{% endif %}</p></div></div>
+  <div class="kv">
+    <div><span>Guruh</span><b>{{ g.name|default:"Guruhsiz" }}</b></div>
+    <div><span>Holati</span><b>{{ s.get_status_display }}</b></div>
+    {% if money %}
+    <div><span>Oylik to'lov</span><b>{% if price %}{{ price|som }} so'm{% else %}-{% endif %}</b></div>
+    <div><span>{{ now_label }}</span><b class="{% if debt %}bad-t{% else %}good-t{% endif %}">{% if g %}{% if debt %}Qarz {{ debt|som }}{% else %}To'langan{% endif %}{% else %}-{% endif %}</b></div>
+    <div><span>Jami qarz</span><b class="{% if total_debt %}bad-t{% else %}good-t{% endif %}">{{ total_debt|som }} so'm</b></div>
+    {% endif %}
+    <div><span>Davomat</span><b>{% if att_pct is not None %}{{ att_pct }}%{% else %}-{% endif %}</b></div>
+    <div><span>O'rtacha baho</span><b>{% if avg is not None %}{{ avg }}%{% else %}-{% endif %}</b></div>
+  </div>
+  {% if risk and money %}<div class="banner {% if risk.sc >= 50 %}error{% else %}warning{% endif %}">Ketish xavfi {% if risk.sc >= 50 %}yuqori{% else %}o'rta{% endif %}: {{ risk.why }}</div>{% endif %}
+  {% if marks %}<h3>Davomat (oxirgi {{ marks|length }} dars)</h3><div class="hcells">{% for dt, st in marks %}<i class="hc {{ st }}" title="{{ dt|date:'Y-m-d' }}: {{ st }}"></i>{% endfor %}</div>{% endif %}
+  <h3>Baholar</h3>
+  {% if grades %}<div class="gradeviz">{% spark grade_spark "var(--accent)" %}</div>
+    {% for x in grades %}<div class="mini"><span>{{ x.title }}<br><small class="mut">{{ x.date|date:"Y-m-d" }}</small></span><span class="rowact"><span class="pill {% if x.pct >= 80 %}good{% elif x.pct >= 60 %}warn{% else %}bad{% endif %}">{{ x.score }}/{{ x.max_score }}</span>{% url 'grade_delete' x.pk as du %}{% include "crm/_del.html" with del_url=du %}</span></div>{% endfor %}
+  {% else %}<p class="mut m0">Baho hali qo'yilmagan.</p>{% endif %}
+  {% if money %}
+  <h3>To'lovlar tarixi</h3>
+  {% for p in payments %}<div class="mini"><span>{{ p.month|mlabel }}<br><small class="mut">{{ p.date|date:"Y-m-d" }} · {{ p.method }}{% if p.refund %} · qaytarish{% endif %}</small></span><span class="rowact"><span class="money">{{ p.amount|som }}</span><a class="btn sm ghost" href="{% url 'payment_receipt' p.pk %}">Kvitansiya</a></span></div>{% empty %}<p class="mut m0">To'lov hali yo'q.</p>{% endfor %}
+  {% endif %}
+  <div class="fbtns">
+    <a class="btn" href="{% url 'grade_add' s.pk %}">Baho qo'yish</a>
+    <a class="btn" href="{% url 'student_doc' s.pk 'shartnoma' %}">Shartnoma</a>
+    <a class="btn" href="{% url 'student_doc' s.pk 'sertifikat' %}">Sertifikat</a>
+    {% if money and s.status == "faol" and g %}<a class="btn" href="{% url 'payment_add' %}?student={{ s.pk }}">To'lov</a>{% endif %}
+    <a class="btn" href="{% url 'student_edit' s.pk %}">Tahrirlash</a>
+    <a class="btn primary" href="{% url 'talabalar' %}">Yopish</a>
+  </div>
+</div>
+</div>
+{% endblock %}

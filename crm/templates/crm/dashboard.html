@@ -1,0 +1,62 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Asosiy{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-t">
+    <p class="hero-k">{{ date_line }}</p>
+    <h1>{{ greet }}{% if first %}, {{ first }}{% endif %}</h1>
+    <p>{{ center.name|default:"O'quv markaz" }}: {{ active }} ta faol talaba{% if due_n %}, {{ due_n }} ta lidga aloqa qilish kerak{% endif %}.</p>
+    <div class="tools" style="margin-top:14px">
+      <a class="btn heroBtn" href="{% url 'lead_add' %}">+ Lid</a>
+      {% if can_money %}<a class="btn heroBtn" href="{% url 'payment_add' %}">+ To'lov</a>{% endif %}
+      <a class="btn heroBtn" href="{% url 'davomat' %}">Davomat olish</a>
+    </div>
+  </div>
+  <div class="hero-r">{% ring rate 104 11 "#7FB0FF" rate_label "rgba(255,255,255,.18)" "#fff" %}<span>{{ now_label }}<br>to'lov rejasi</span></div>
+</section>
+<div class="tools" style="justify-content:flex-end">
+  {% if is_director %}
+    {% if has_demo %}<form method="post" action="{% url 'unseed' %}" class="inl">{% csrf_token %}<button class="btn sm" data-confirm>Namunalarni o'chirish</button></form>{% endif %}
+    <a class="btn sm" href="{% url 'center_edit' %}">Markaz ma'lumotlari</a>
+  {% endif %}
+  <a class="btn sm" href="{% url 'import_data' %}">Excel'dan import</a>
+  {% if can_money %}<a class="btn sm primary" href="{% url 'export_xlsx' %}">Excelga yuklab olish</a>{% endif %}
+</div>
+{% if empty %}
+<div class="empty"><h2>CRM hali bo'sh</h2><p>Birinchi guruhni yarating, keyin lid va talabalarni qo'shing. Yoki namunaviy ma'lumot bilan tizimni sinab ko'ring.</p>
+  <div class="tools"><a class="btn primary" href="{% url 'group_add' %}">Guruh qo'shish</a><a class="btn" href="{% url 'lead_add' %}">Lid qo'shish</a>{% if is_director %}<form method="post" action="{% url 'seed' %}" class="inl">{% csrf_token %}<button class="btn">Namuna yuklash</button></form>{% endif %}</div></div>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "cap" %}</span>Faol talabalar</div><div class="num">{{ active }}</div><div class="hint">Kutmoqda: {{ waiting_n }}</div>{% spark spark_students "var(--accent)" %}</div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "funnel" %}</span>Yangi lidlar</div><div class="num">{{ new_leads }}</div><div class="hint">Jami {{ d.leads|length }} ta lid</div>{% spark spark_leads "var(--av4)" %}</div>
+  {% if can_money %}
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "wallet" %}</span>Shu oy tushum</div><div class="num">{{ income|som }}<small>so'm</small></div><div class="hint">{% if expected %}Reja: {{ expected|som }} so'm{% else %}Hisoblangan reja yo'q{% endif %}</div>{% spark spark_inc "var(--good)" %}</div>
+  <div class="tile"><div class="lbl"><span class="ico bad">{% icon "alert" %}</span>Qarzdorlik</div><div class="num">{{ debt_all|som }}<small>so'm</small></div><div class="hint">{{ debt_n }} ta talaba, barcha oylar</div></div>
+  {% endif %}
+  {% if admin %}
+  <div class="tile"><div class="lbl"><span class="ico warn">{% icon "receipt" %}</span>Shu oy xarajat</div><div class="num">{{ exp|som }}<small>so'm</small></div><div class="hint"></div>{% spark spark_exp "var(--warn)" %}</div>
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "trend" %}</span>Sof foyda</div><div class="num"><span class="{% if net >= 0 %}good-t{% else %}bad-t{% endif %}">{{ net|som }}</span><small>so'm</small></div><div class="hint">Tushum minus xarajat</div></div>
+  {% endif %}
+</div>
+<div class="cols">
+  {% if can_money %}<section class="panel wide"><h2>So'nggi 6 oy</h2><div id="chart6" data-admin="{{ admin|yesno:'1,0' }}"></div>{{ chart|json_script:"chart6-data" }}</section>{% endif %}
+  <section class="panel"><h2>Lid manbalari</h2>{% if sources %}<div id="donut"></div>{{ sources|json_script:"donut-data" }}{% else %}<p class="mut m0">Lid qo'shilgach qaysi manba samarali ekani shu yerda ko'rinadi.</p>{% endif %}</section>
+  <section class="panel"><h2>Lidlar voronkasi</h2>
+    {% if d.leads %}<div class="funnel">{% for r in funnel.rows %}<div class="frow2"><div class="fbar" style="width:{{ r.w }}%"><span>{{ r.label }}</span><b>{{ r.n }}</b></div><small>{% if r.pct is not None %}{{ r.pct }}%{% endif %}</small></div>{% endfor %}</div>
+    <p style="margin:8px 0 0;color:var(--muted);font-size:12px">Rad etganlar: {{ funnel.rad }}. O'ngdagi foiz oldingi bosqichdan o'tganlar ulushi.</p>
+    {% else %}<p class="mut m0">Lid qo'shilgach voronka shu yerda ko'rinadi.</p>{% endif %}
+  </section>
+  <section class="panel"><h2>Guruhlar to'lishi</h2>{% if group_fill %}<div class="ringgrid">{% for x in group_fill %}<div class="ringcard">{% ring x.p 60 7 x.col x.label %}<div><b>{{ x.g.name }}</b><small>{{ x.n }}{% if x.g.capacity %} / {{ x.g.capacity }}{% endif %} talaba</small></div></div>{% endfor %}</div>{% else %}<p class="mut m0">Guruh hali yo'q.</p>{% endif %}</section>
+  {% if can_money %}{% include "crm/p/debtors.html" %}{% endif %}
+  {% include "crm/p/risks.html" %}
+  {% include "crm/p/waiting.html" %}
+  {% include "crm/p/reminders.html" %}
+  {% include "crm/p/trials.html" %}
+  {% include "crm/p/bdays.html" %}
+  {% include "crm/p/returning.html" %}
+  {% include "crm/p/ending.html" %}
+  {% include "crm/p/mytasks.html" %}
+</div>
+{% endif %}
+{% endblock %}

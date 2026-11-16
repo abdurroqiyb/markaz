@@ -1,0 +1,1 @@
+{% load crm_tags %}<section class="panel"><h2>{{ debt_title|default:"Shu oy qarzdorlar" }}</h2>{% for x in debtors %}<div class="mini"><span>{{ x.s.name }}<br><small class="mut">{{ x.g.name }}</small></span><span class="money bad-t">{{ x.debt|som }}</span></div>{% empty %}<p class="mut m0">Bu oy qarzdor yo'q.</p>{% endfor %}</section>

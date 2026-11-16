@@ -1,0 +1,15 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Qidiruv{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Qidiruv</h1><p class="sub">Talaba, lid, guruh va to'lovlar bo'yicha</p></div></div>
+<form method="get" class="searchform"><input name="q" class="search" style="max-width:480px" type="search" placeholder="Ism, telefon, guruh..." value="{{ q }}" aria-label="Qidiruv" autocomplete="off" autofocus data-live></form>
+{% if short %}<p class="none">Kamida 2 ta belgi yozing: ism, telefon, guruh yoki kurs.</p>
+{% elif not found %}<p class="none">Hech narsa topilmadi.</p>
+{% else %}<div class="cols">
+  {% if students %}<section class="panel"><h2>Talabalar</h2>{% for x in students %}<div class="mini"><span>{{ x.s.name }}<br><small class="mut">{{ x.s.phone }}{% if x.g %} · {{ x.g.name }}{% endif %}</small></span><a class="btn sm" href="{% url 'student_profile' x.s.pk %}">Profil</a></div>{% endfor %}</section>{% endif %}
+  {% if leads %}<section class="panel"><h2>Lidlar</h2>{% for l in leads %}<div class="mini"><span>{{ l.name }}<br><small class="mut">{{ l.phone }}{% if l.course %} · {{ l.course }}{% endif %} · {{ l.get_status_display }}</small></span><a class="btn sm" href="{% url 'lead_log' l.pk %}">Tarix</a></div>{% endfor %}</section>{% endif %}
+  {% if groups %}<section class="panel"><h2>Guruhlar</h2>{% for x in groups %}<div class="mini"><span>{{ x.g.name }}<br><small class="mut">{{ x.g.teacher }} {{ x.g.days }} {{ x.g.time }}</small></span><span class="pill info">{{ x.n }} talaba</span></div>{% endfor %}</section>{% endif %}
+  {% if pays %}<section class="panel"><h2>To'lovlar</h2>{% for x in pays %}<div class="mini"><span>{{ x.s.name }}<br><small class="mut">{{ x.p.date|date:"Y-m-d" }} · {{ x.p.month|mlabel }} · {{ x.p.method }}</small></span><span class="money">{{ x.p.amount|som }}</span></div>{% endfor %}</section>{% endif %}
+</div>{% endif %}
+{% endblock %}
