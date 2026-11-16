@@ -49,7 +49,7 @@
     const W=140,H=40,P=4,n=vals.length;if(!n)return"";
     const mx=Math.max(1,...vals),x=i=>P+i*(W-2*P)/Math.max(1,n-1),y=v=>H-P-v/mx*(H-2*P);
     const pts=vals.map((v,i)=>[x(i),y(v)]),line=smooth(pts),gid=nid("sg");
-    return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${col};stop-opacity:.32"/><stop offset="1" style="stop-color:${col};stop-opacity:0"/></linearGradient></defs><path class="sparea" d="${line} L${x(n-1)},${H-P} L${x(0)},${H-P} Z" fill="url(#${gid})"/><path class="spline" d="${line}" pathLength="1" fill="none" style="stroke:${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><circle class="spdot" cx="${x(n-1)}" cy="${y(vals[n-1])}" r="3.4" style="fill:${col}"/></svg>`;
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${col};stop-opacity:.16"/><stop offset="1" style="stop-color:${col};stop-opacity:0"/></linearGradient></defs><path class="sparea" d="${line} L${x(n-1)},${H-P} L${x(0)},${H-P} Z" fill="url(#${gid})"/><path class="spline" d="${line}" pathLength="1" fill="none" style="stroke:${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle class="spdot" cx="${x(n-1)}" cy="${y(vals[n-1])}" r="3.4" style="fill:${col}"/></svg>`;
   }
 
   /* ---- donut ---- */
@@ -57,41 +57,56 @@
     const tot=rows.reduce((a,x)=>a+x.n,0);if(!tot)return"";
     const r=42,c=2*Math.PI*r,gap=rows.length>1?2.5:0;let cum=0,arcs="";
     rows.forEach((x,k)=>{const f=x.n/tot,len=Math.max(0.5,f*c-gap);
-      arcs+=`<circle class="darc" data-g="d${k}" data-group="d${k}" data-tip="${esc(tipRow(`var(--av${x.i})`,x.s,x.n+" lid")+`<div class="ctr sub">${x.pct}% yozildi (${x.w})</div>`)}" cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--av${x.i});--len:${len.toFixed(1)};--c:${c.toFixed(1)};animation-delay:${k*70}ms" stroke-width="15" stroke-dasharray="${len.toFixed(1)} ${(c-len).toFixed(1)}" stroke-dashoffset="${(-cum*c).toFixed(1)}" transform="rotate(-90 60 60)"/>`;cum+=f});
-    return `<div class="donutwrap"><svg viewBox="0 0 120 120" width="148" height="148" role="img" aria-label="Lid manbalari"><circle cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--mute-soft)" stroke-width="15"/>${arcs}<text x="60" y="57" text-anchor="middle" style="fill:var(--ink);font:800 24px var(--f-display)">${tot}</text><text x="60" y="74" text-anchor="middle" style="fill:var(--muted);font:500 10px var(--f-body)">jami lid</text></svg><div class="dleg">${rows.map((x,k)=>`<div data-g="d${k}" data-group="d${k}" data-tip="${esc(tipRow(`var(--av${x.i})`,x.s,x.n+" lid"))}"><i style="background:var(--av${x.i})"></i><span>${esc(x.s)}</span><b>${x.n}</b><small>${x.pct}%</small><em class="dbar"><u style="width:${Math.round(x.n/tot*100)}%;background:var(--av${x.i})"></u></em></div>`).join("")}</div></div>`;
+      arcs+=`<circle class="darc" data-g="d${k}" data-group="d${k}" data-tip="${esc(tipRow(`var(--k${x.i})`,x.s,x.n+" lid")+`<div class="ctr sub">${x.pct}% yozildi (${x.w})</div>`)}" cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--k${x.i});--len:${len.toFixed(1)};--c:${c.toFixed(1)};animation-delay:${k*70}ms" stroke-width="15" stroke-dasharray="${len.toFixed(1)} ${(c-len).toFixed(1)}" stroke-dashoffset="${(-cum*c).toFixed(1)}" transform="rotate(-90 60 60)"/>`;cum+=f});
+    return `<div class="donutwrap"><svg viewBox="0 0 120 120" width="148" height="148" role="img" aria-label="Lid manbalari"><circle cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--mute-soft)" stroke-width="15"/>${arcs}<text x="60" y="57" text-anchor="middle" style="fill:var(--ink);font:800 24px var(--f-display)">${tot}</text><text x="60" y="74" text-anchor="middle" style="fill:var(--muted);font:500 10px var(--f-body)">jami lid</text></svg><div class="dleg">${rows.map((x,k)=>`<div data-g="d${k}" data-group="d${k}" data-tip="${esc(tipRow(`var(--k${x.i})`,x.s,x.n+" lid"))}"><i style="background:var(--k${x.i})"></i><span>${esc(x.s)}</span><b>${x.n}</b><small>${x.pct}%</small><em class="dbar"><u style="width:${Math.round(x.n/tot*100)}%;background:var(--k${x.i})"></u></em></div>`).join("")}</div></div>`;
   }
 
   /* ---- ustunli grafik (bir nechta seriya + ixtiyoriy chiziq) ----
      data: [{label, short, <key>: son}], series: [{key,label,color,type:"bar"|"line"}] */
+  /* yuqori burchaklari 4px yumaloq, asosi to'g'ri ustun (manfiy bo'lsa pastga) */
+  function barPath(x,y,w,h,neg){
+    const r=Math.min(4,w/2,h);
+    if(neg)return `M${x},${y}h${w}v${h-r}q0,${r} ${-r},${r}h${-(w-2*r)}q${-r},0 ${-r},${-r}Z`;
+    return `M${x},${y+h}v${-(h-r)}q0,${-r} ${r},${-r}h${w-2*r}q${r},0 ${r},${r}v${h-r}Z`;
+  }
   function columns(data,series,o){
     o=o||{};const unit=o.unit==null?"so'm":o.unit;
     const bars=series.filter(s=>s.type!=="line"),lines=series.filter(s=>s.type==="line");
-    const all=data.flatMap(d=>series.map(s=>Number(d[s.key]||0)));
+    const num=v=>v==null||v===""?null:Number(v);
+    const all=data.flatMap(d=>series.map(s=>num(d[s.key])).filter(v=>v!=null));
     const mx=o.max||niceCeil(Math.max(1,...all)),mn=Math.min(0,...all)<0?-niceCeil(-Math.min(...all)):0;
+    const tick=v=>unit==="%"?Math.round(v)+"%":compact(v);
+    const lastLbl=lines.length?Math.max(...lines.map(s=>tick(Number(data[data.length-1][s.key]||0)).length))*6.6+12:0;
     const mob=innerWidth<640,W=Math.max(300,Math.round(o.w||(mob?400:900))),H=o.h||(W<520?240:290),
-      L=Math.max(40,...[0,1,2,3,4].map(i=>compact(mn+(mx-mn)*i/4).length*6.4+14)),R=12,T=18,B=30,pw=W-L-R,ph=H-T-B,n=data.length,gw=pw/n;
-    const inner=Math.min(gw*.62,W<520?44:92),bw=Math.max(6,(inner-(bars.length-1)*4)/Math.max(1,bars.length));
+      L=Math.max(36,...[0,1,2,3,4].map(i=>tick(mn+(mx-mn)*i/4).length*6.4+12)),R=Math.max(12,lastLbl),T=16,B=28,pw=W-L-R,ph=H-T-B,n=data.length,gw=pw/n;
+    const GAP=2,bw=Math.max(4,Math.min(24,(gw*.7-(bars.length-1)*GAP)/Math.max(1,bars.length))),inner=bars.length*bw+(bars.length-1)*GAP;
     const y=v=>T+ph-(v-mn)/(mx-mn)*ph,y0=y(0);
-    const defs=bars.map((s,k)=>`<linearGradient id="${s._g=nid("bg")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${s.color}"/><stop offset="1" style="stop-color:${s.color};stop-opacity:.6"/></linearGradient>`).join("")
-      +lines.map(s=>`<linearGradient id="${s._g=nid("lg")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${s.color};stop-opacity:.22"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient>`).join("");
-    let g=`<defs>${defs}</defs>`;
-    for(let i=0;i<=4;i++){const v=mn+(mx-mn)*i/4,yy=y(v);g+=`<line class="grid${v===0?" zero":""}" x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}"/><text class="ax" x="${L-8}" y="${(yy+4).toFixed(1)}" text-anchor="end">${compact(v)}</text>`}
-    const cx=i=>L+gw*i+gw/2;
+    const fmtv=v=>v==null?"-":unit==="%"?Math.round(v)+"%":fmt(v)+(unit?" "+esc(unit):"");
+    let g="";
+    for(let i=0;i<=4;i++){const v=mn+(mx-mn)*i/4,yy=Math.round(y(v))+.5;g+=`<line class="grid${v===0?" zero":""}" x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}"/><text class="ax" x="${L-8}" y="${(yy+3.5).toFixed(1)}" text-anchor="end">${tick(v)}</text>`}
+    if(mn<0)g+=`<line class="grid zero" x1="${L}" x2="${W-R}" y1="${Math.round(y0)+.5}" y2="${Math.round(y0)+.5}"/>`;
+    const cx=i=>L+gw*i+gw/2,gridEnd=g.length;
     data.forEach((d,i)=>{
       const x0=cx(i)-inner/2;
-      g+=`<rect class="colbg" data-g="c${i}" x="${(L+gw*i+2).toFixed(1)}" y="${T}" width="${(gw-4).toFixed(1)}" height="${ph}" rx="8"/>`;
-      bars.forEach((s,k)=>{const v=Number(d[s.key]||0);if(!v)return;const top=Math.min(y(v),y0),h=Math.max(1.5,Math.abs(y(v)-y0));
-        g+=`<rect class="cbar" data-g="c${i}" x="${(x0+k*(bw+4)).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(6,bw/2).toFixed(1)}" fill="url(#${s._g})" style="animation-delay:${i*60+k*30}ms"/>`});
-      g+=`<text class="ax xl" x="${cx(i).toFixed(1)}" y="${H-9}" text-anchor="middle">${esc(d.short||d.label)}</text>`;
+      g+=`<rect class="colbg" data-g="c${i}" x="${(L+gw*i+2).toFixed(1)}" y="${T}" width="${(gw-4).toFixed(1)}" height="${ph}" rx="6"/>`;
+      bars.forEach((s,k)=>{const v=num(d[s.key]);if(!v)return;const neg=v<0,top=Math.min(y(v),y0),h=Math.max(2,Math.abs(y(v)-y0));
+        g+=`<path class="cbar${neg?" neg":""}" data-g="c${i}" d="${barPath(+(x0+k*(bw+GAP)).toFixed(1),+top.toFixed(1),+bw.toFixed(1),+h.toFixed(1),neg)}" style="fill:${s.color};animation-delay:${i*40+k*20}ms"/>`});
+      g+=`<text class="ax xl" x="${cx(i).toFixed(1)}" y="${H-8}" text-anchor="middle">${esc(d.short||d.label)}</text>`;
     });
+    let areas="";
     lines.forEach(s=>{
-      const pts=data.map((d,i)=>[cx(i),y(Number(d[s.key]||0))]),path=smooth(pts);
-      g+=`<path class="carea" d="${path} L${pts[pts.length-1][0].toFixed(1)},${y0.toFixed(1)} L${pts[0][0].toFixed(1)},${y0.toFixed(1)} Z" fill="url(#${s._g})"/>`;
-      g+=`<path class="cline" d="${path}" pathLength="1" fill="none" style="stroke:${s.color}"/>`;
-      pts.forEach((p,i)=>{g+=`<circle class="cdot" data-g="c${i}" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="stroke:${s.color}"/>`});
+      const pts=data.map((d,i)=>{const v=num(d[s.key]);return v==null?null:[cx(i),y(v)]});
+      const segs=[];let cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);
+      segs.forEach(seg=>{const path=smooth(seg);
+        if(seg.length>1)areas+=`<path class="carea" d="${path} L${seg[seg.length-1][0].toFixed(1)},${y0.toFixed(1)} L${seg[0][0].toFixed(1)},${y0.toFixed(1)} Z" style="fill:${s.color}"/>`;
+        g+=`<path class="cline" d="${path}" pathLength="1" fill="none" style="stroke:${s.color}"/>`});
+      pts.forEach((p,i)=>{if(p)g+=`<circle class="cdot" data-g="c${i}" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" style="fill:${s.color}"/>`});
+      const li=pts.map((p,i)=>p?i:-1).filter(i=>i>=0).pop();
+      if(li!=null&&li>=0){const p=pts[li];g+=`<text class="clab" x="${(p[0]+8).toFixed(1)}" y="${(p[1]+4).toFixed(1)}">${tick(Number(data[li][s.key]))}</text>`}
     });
+    g=g.slice(0,gridEnd)+areas+g.slice(gridEnd);
     data.forEach((d,i)=>{
-      const rows=series.map(s=>tipRow(s.color,s.label,fmt(d[s.key])+(unit?" "+esc(unit):""))).join("");
+      const rows=series.map(s=>tipRow(s.color,s.label,fmtv(num(d[s.key])))).join("");
       g+=`<rect class="hit" data-group="c${i}" data-tip="${esc(`<div class="cth">${esc(d.label)}</div>`+rows)}" x="${(L+gw*i).toFixed(1)}" y="${T}" width="${gw.toFixed(1)}" height="${ph+B-4}"/>`;
     });
     const legend=series.length>1?`<div class="legend">${series.map(s=>`<span><i class="${s.type==="line"?"ln":""}" style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}</div>`:"";
@@ -99,14 +114,14 @@
   }
 
   function chart6(data,isAdmin){
-    const series=[{key:"inc",label:"Tushum",color:"var(--accent)"}];
-    if(isAdmin)series.push({key:"exp",label:"Xarajat",color:"var(--bar2)"},{key:"net",label:"Sof foyda",color:"var(--good)",type:"line"});
+    const series=[{key:"inc",label:"Tushum",color:"var(--c1)"}];
+    if(isAdmin)series.push({key:"exp",label:"Xarajat",color:"var(--c2)"},{key:"net",label:"Sof foyda",color:"var(--c3)",type:"line"});
     return columns(data,series,{aria:"Oxirgi 6 oy tushum, xarajat va sof foyda",w:arguments[2]});
   }
 
   /* ---- gorizontal ustunlar: [{label, v, sub}] ---- */
   function hbars(rows,o){
-    o=o||{};const mx=Math.max(1,...rows.map(r=>r.v)),col=o.color||"var(--accent)",unit=o.unit==null?"so'm":o.unit;
+    o=o||{};const mx=Math.max(1,...rows.map(r=>r.v)),col=o.color||"var(--c1)",unit=o.unit==null?"so'm":o.unit;
     return `<div class="hbars">${rows.map((r,i)=>`<div class="hbr" data-tip="${esc(`<div class="cth">${esc(r.label)}</div>`+tipRow(r.color||col,o.label||"Qiymat",fmt(r.v)+(unit?" "+esc(unit):"")))}"><span class="hbl">${esc(r.label)}${r.sub?`<small>${esc(r.sub)}</small>`:""}</span><span class="hbt"><i style="width:${(r.v/mx*100).toFixed(1)}%;background:${r.color||col};animation-delay:${i*50}ms"></i></span><b>${compact(r.v)}</b></div>`).join("")}</div>`;
   }
 

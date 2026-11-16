@@ -585,7 +585,7 @@ class Data:
             came, tot = by_month.get(k, (0, 0))
             out.append({"k": k, "label": mlabel(k), "short": SHORT[int(k[5:]) - 1],
                         "plan": self.expected_for(k), "got": self.income(k),
-                        "att": pct(came, tot) if tot else 0})
+                        "att": pct(came, tot) if tot else None})
         return out
 
     def expense_cats(self, m):

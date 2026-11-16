@@ -17,7 +17,7 @@
 </section>
 <section class="panel"><h2>{% if sel %}Reyting: {{ sel.title }} <small class="mut">{{ sel.date|date:"d.m.Y" }} · o'rtacha {{ sel.avg }}%</small>{% else %}Guruh o'sishi{% endif %}</h2>
 {% if sel %}{{ rank_bars|json_script:"rank-data" }}<div data-src="rank-data" data-chart='{"type":"hbars","label":"Natija","unit":"%"}'></div>
-{% elif grow %}{{ grow|json_script:"grow-data" }}<div data-src="grow-data" data-chart='{"type":"columns","h":240,"unit":"%","max":100,"aria":"Imtihonlar bo&#39;yicha o&#39;rtacha natija","series":[{"key":"avg","label":"O&#39;rtacha","color":"var(--accent)"}]}'></div><small class="mut">Har bir imtihon bo'yicha guruhning o'rtacha natijasi (%)</small>
+{% elif grow %}{{ grow|json_script:"grow-data" }}<div data-src="grow-data" data-chart='{"type":"columns","h":240,"unit":"%","max":100,"aria":"Imtihonlar bo&#39;yicha o&#39;rtacha natija","series":[{"key":"avg","label":"O&#39;rtacha","color":"var(--c1)"}]}'></div><small class="mut">Har bir imtihon bo'yicha guruhning o'rtacha natijasi (%)</small>
 {% else %}<p class="mut m0">Imtihon natijasi kiritilgach, reyting va o'sish grafigi shu yerda chiqadi.</p>{% endif %}
 </section>
 </div>

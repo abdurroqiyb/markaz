@@ -35,10 +35,10 @@ body{background:#e9ecf1}
     <div><small>Marja</small><b>{% if margin is not None %}{{ margin }}%{% else %}-{% endif %}</b></div>
     <div><small>Reja bajarilishi</small><b>{% if p_inc %}{{ inc_pct }}{% else %}-{% endif %}</b></div>
   </div>
-  <section><h2>6 oylik dinamika</h2>{{ six|json_script:"six-data" }}<div data-src="six-data" data-chart='{"type":"columns","h":230,"aria":"6 oylik dinamika","series":[{"key":"i","label":"Tushum","color":"#2B59E6"},{"key":"e","label":"Xarajat","color":"#B7C0CE"},{"key":"net","label":"Sof foyda","color":"#0F7A4B","type":"line"}]}'></div></section>
+  <section><h2>6 oylik dinamika</h2>{{ six|json_script:"six-data" }}<div data-src="six-data" data-chart='{"type":"columns","h":230,"aria":"6 oylik dinamika","series":[{"key":"i","label":"Tushum","color":"#2a78d6"},{"key":"e","label":"Xarajat","color":"#eb6834"},{"key":"net","label":"Sof foyda","color":"#1baf7a","type":"line"}]}'></div></section>
   <div class="two">
-    <section><h2>Guruhlar tushumi</h2>{% if grp_bars %}{{ grp_bars|json_script:"grp-data" }}<div data-src="grp-data" data-chart='{"type":"hbars","label":"Tushum","color":"#2B59E6"}'></div>{% else %}<p class="mut">Tushum yo'q.</p>{% endif %}</section>
-    <section><h2>Xarajatlar turlari</h2>{% if exp_cats %}{{ exp_cats|json_script:"ecat-data" }}<div data-src="ecat-data" data-chart='{"type":"hbars","label":"Xarajat","color":"#92580A"}'></div>{% else %}<p class="mut">Xarajat yo'q.</p>{% endif %}</section>
+    <section><h2>Guruhlar tushumi</h2>{% if grp_bars %}{{ grp_bars|json_script:"grp-data" }}<div data-src="grp-data" data-chart='{"type":"hbars","label":"Tushum","color":"#2a78d6"}'></div>{% else %}<p class="mut">Tushum yo'q.</p>{% endif %}</section>
+    <section><h2>Xarajatlar turlari</h2>{% if exp_cats %}{{ exp_cats|json_script:"ecat-data" }}<div data-src="ecat-data" data-chart='{"type":"hbars","label":"Xarajat","color":"#2a78d6"}'></div>{% else %}<p class="mut">Xarajat yo'q.</p>{% endif %}</section>
   </div>
   <section><h2>Guruhlar foydaliligi</h2><table class="tbl"><thead><tr><th>Guruh</th><th>Ustoz</th><th class="r">Talaba</th><th class="r">Tushum</th><th class="r">Ustoz oyligi</th><th class="r">Qoladi</th></tr></thead><tbody>
   {% for r in rows %}<tr><td>{{ r.g.name }}</td><td>{{ r.g.teacher|default:"-" }}</td><td class="r">{{ r.n }}</td><td class="r">{{ r.i|som }}</td><td class="r">{{ r.sal|som }}</td><td class="r">{{ r.rest|som }}</td></tr>{% empty %}<tr><td colspan="6" class="mut">Guruh yo'q</td></tr>{% endfor %}</tbody></table></section>
