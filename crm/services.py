@@ -11,7 +11,7 @@ from functools import cached_property
 from django.utils import timezone
 
 from .models import (AdSpend, Attendance, Center, Charge, Expense, Group, Lead,
-                     Lesson, Payment, Promo, Student)
+                     Lesson, Payment, Promo, StatusChange, Student)
 from .roles import is_teacher_scoped
 
 MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust",
@@ -230,6 +230,39 @@ class Data:
         return out
 
     @cached_property
+    def status_log(self):
+        """{student_id: [(date, status), ...]} sana bo'yicha."""
+        out = defaultdict(list)
+        for sid, d_, st in StatusChange.objects.order_by("date", "id").values_list("student_id", "date", "status"):
+            out[sid].append((d_, st))
+        return out
+
+    def timeline(self, s):
+        """Talaba holatlari tarixi. Tarix bo'lmasa (eski yozuvlar) hozirgi holatdan tiklanadi."""
+        log = self.status_log.get(s.id)
+        if log:
+            return log
+        start = s.join_date or date.min
+        if s.status == "muzlatilgan" and s.paused_at:
+            return [(start, "faol"), (s.paused_at, "muzlatilgan")]
+        return [(start, s.status)]
+
+    def status_on(self, s, day):
+        tl = self.timeline(s)
+        st = tl[0][1]
+        for d_, x in tl:
+            if d_ > day:
+                break
+            st = x
+        return st
+
+    def billable(self, s, m):
+        """Oy uchun to'lov olinadimi: oy oxirida (joriy oy bo'lsa bugun) talaba faol bo'lgan bo'lsa."""
+        y, mo = map(int, m.split("-"))
+        end = (date(y + mo // 12, mo % 12 + 1, 1) - timedelta(days=1))
+        return self.status_on(s, min(end, self.TODAY)) == "faol"
+
+    @cached_property
     def paid_map(self):
         m = defaultdict(int)
         for p in self.payments:
@@ -260,7 +293,7 @@ class Data:
         return bool(s.join_date and mkey(s.join_date) > m)
 
     def debt_for(self, s, m):
-        if s.status != "faol" or not self.group_of(s) or self.joined_after(s, m):
+        if not self.group_of(s) or self.joined_after(s, m) or not self.billable(s, m):
             return 0
         return max(0, self.charge_amt(s, m) - self.paid_for(s, m))
 
@@ -287,7 +320,7 @@ class Data:
 
     def expected_for(self, m):
         return sum(self.charge_amt(s, m) for s in self.students
-                   if s.status == "faol" and self.group_of(s) and not self.joined_after(s, m))
+                   if self.group_of(s) and not self.joined_after(s, m) and self.billable(s, m))
 
     def income(self, m):
         return sum(p.amount for p in self.payments if p.month == m)
@@ -515,8 +548,11 @@ def apply_student_rules(student, previous=None):
             msg = f"Promokod qo'llandi: chegirma {fmt(student.discount)} so'm"
         else:
             msg = "Promokod topilmadi yoki guruh tanlanmagan"
-    if student.status == "muzlatilgan" and not (previous and previous.paused_at):
-        student.paused_at = today()
+    if student.status == "muzlatilgan":
+        if not (previous and previous.status == "muzlatilgan" and previous.paused_at):
+            student.paused_at = today()
+    else:
+        student.paused_at = None
     return msg
 
 

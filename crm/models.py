@@ -218,6 +218,41 @@ class Student(TimeStamped):
     def status_cls(self):
         return self.STATUS_CLS.get(self.status, "mute")
 
+    def save(self, *args, **kwargs):
+        """Holat o'zgarsa tarixga yoziladi: qarz shu tarix bo'yicha hisoblanadi."""
+        old = None
+        if self.pk:
+            old = Student.objects.filter(pk=self.pk).values_list("status", flat=True).first()
+        super().save(*args, **kwargs)
+        if old != self.status:
+            day = timezone.localdate()
+            if old is None:
+                day = self.join_date or day
+            elif not self.status_log.exists():
+                # Eski yozuv: avvalgi holatni ham boshlang'ich nuqta sifatida saqlaymiz.
+                start = self.join_date or day
+                if old == "muzlatilgan" and self.paused_at:
+                    StatusChange.objects.create(student=self, status="faol", date=min(start, self.paused_at))
+                    start = self.paused_at
+                StatusChange.objects.create(student=self, status=old, date=min(start, day))
+            StatusChange.objects.create(student=self, status=self.status, date=day)
+
+
+class StatusChange(models.Model):
+    """Talaba holati tarixi: qaysi sanadan qaysi holatda bo'lgani."""
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="status_log", verbose_name="Talaba")
+    status = models.CharField("Holati", max_length=20, choices=Student.STATUSES)
+    date = models.DateField("Sanadan")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Holat o'zgarishi"
+        verbose_name_plural = "Holatlar tarixi"
+        ordering = ["date", "id"]
+
+    def __str__(self):
+        return f"{self.student} · {self.date} · {self.get_status_display()}"
+
 
 class Payment(TimeStamped):
     METHODS = [(m, m) for m in ["Naqd", "Karta", "O'tkazma"]]
