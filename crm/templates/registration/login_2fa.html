@@ -1,0 +1,15 @@
+{% extends "crm/base.html" %}
+{% block title %}Tasdiqlash kodi{% endblock %}
+{% block content %}
+<div class="loginbox">
+  <form method="post" class="formcard" novalidate>
+    {% csrf_token %}
+    <div class="brand loginbrand"><span class="mark">M</span><div>Markaz CRM<small>Ikki bosqichli kirish</small></div></div>
+    <h2>Tasdiqlash kodi</h2>
+    <p class="mut m0">{{ u.get_full_name|default:u.username }}, telefoningizdagi Authenticator ilovasidan 6 xonali kodni kiriting.</p>
+    {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+    <div class="field"><label for="id_code">Kod</label><input id="id_code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" autofocus required class="otp"></div>
+    <div class="fbtns"><a class="btn" href="{% url 'login' %}">Orqaga</a><button type="submit" class="btn primary">Tasdiqlash</button></div>
+  </form>
+</div>
+{% endblock %}

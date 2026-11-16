@@ -6,7 +6,7 @@
     {% csrf_token %}
     <div class="brand loginbrand"><span class="mark">M</span><div>Markaz CRM<small>O'quv markaz boshqaruvi</small></div></div>
     <h2>Tizimga kirish</h2>
-    {% if form.non_field_errors %}<div class="banner error">Login yoki parol noto'g'ri.</div>{% endif %}
+    {% if lock_msg %}<div class="banner error" role="alert">{{ lock_msg }}</div>{% elif form.non_field_errors %}<div class="banner error" role="alert">Login yoki parol noto'g'ri.</div>{% endif %}
     <div class="field"><label for="id_username">Login</label><input id="id_username" name="username" autocomplete="username" autofocus required value="{{ form.username.value|default:'' }}"></div>
     <div class="field"><label for="id_password">Parol</label><input id="id_password" name="password" type="password" autocomplete="current-password" required></div>
     <input type="hidden" name="next" value="{{ next }}">

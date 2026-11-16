@@ -80,6 +80,7 @@ urlpatterns = [
     path("zaxira/<int:pk>/yuklash/", v.backup_download, name="backup_download"),
     path("zaxira/tiklash/", v.backup_restore, name="backup_restore_file"),
     path("zaxira/<int:pk>/tiklash/", v.backup_restore, name="backup_restore"),
+    path("zaxira/<int:pk>/yuborish/", v.backup_send, name="backup_send"),
     path("xodimlar/<int:pk>/ochirish/", v.staff_remove, name="staff_remove"),
     path("jurnal/", v.jurnal, name="jurnal"),
     path("qidiruv/", v.qidiruv, name="qidiruv"),

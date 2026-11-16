@@ -1035,7 +1035,23 @@ def zaxira(request):
     return render(request, "crm/zaxira.html", {
         "section": "zaxira", "rows": rows, "last": last, "form": RestoreForm(),
         "db_engine": settings.DB_ENGINE, "db_persistent": settings.DB_PERSISTENT,
+        "targets": bk.offsite_targets(),
     })
+
+
+@section_required("zaxira")
+@require_POST
+def backup_send(request, pk):
+    b = get_object_or_404(Backup.objects.defer("data"), pk=pk)
+    if not bk.offsite_targets():
+        messages.error(request, "Tashqi manzil sozlanmagan (Telegram yoki e-pochta). Pastdagi yo'riqnomaga qarang.")
+        return redirect("zaxira")
+    done, errors = bk.send_offsite(b.pk)
+    if done:
+        messages.success(request, f"Yuborildi: {', '.join(done)}")
+    if errors:
+        messages.error(request, "Yuborilmadi: " + "; ".join(errors))
+    return redirect("zaxira")
 
 
 @section_required("zaxira")

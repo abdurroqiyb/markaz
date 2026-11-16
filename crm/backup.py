@@ -10,6 +10,7 @@
 import gzip
 import json
 import logging
+import os
 import threading
 import time
 from datetime import timedelta
@@ -85,6 +86,8 @@ def ensure_daily_backup(force_check=False):
             return None
         b = make_backup("auto")
         log.info("Avtomatik zaxira olindi: %s bayt, %s yozuv", b.size, b.objects_count)
+        if offsite_targets():
+            threading.Thread(target=send_offsite, args=(b.pk,), daemon=True).start()
         return b
     except Exception:  # zaxira xatosi foydalanuvchi ishini to'xtatmasligi kerak
         log.exception("Avtomatik zaxira olinmadi")
@@ -133,3 +136,75 @@ def restore(payload):
                 for q in sql:
                     c.execute(q)
     return n, pre
+
+
+# ---------------------------------------------------------------- tashqariga yuborish
+def _env(name):
+    return os.environ.get(name, "").strip()
+
+
+def offsite_targets():
+    """Sozlangan manzillar: Telegram (bot token + chat id) va/yoki e-pochta (SMTP + BACKUP_EMAIL_TO)."""
+    out = []
+    if _env("BACKUP_TELEGRAM_BOT_TOKEN") and _env("BACKUP_TELEGRAM_CHAT_ID"):
+        out.append("telegram")
+    if _env("BACKUP_EMAIL_TO") and _env("EMAIL_HOST"):
+        out.append("email")
+    return out
+
+
+def _filename(b):
+    return f"markaz-zaxira-{timezone.localtime(b.created_at):%Y-%m-%d-%H%M}.json.gz"
+
+
+def _send_telegram(b):
+    import urllib.request
+    import uuid
+    token, chat = _env("BACKUP_TELEGRAM_BOT_TOKEN"), _env("BACKUP_TELEGRAM_CHAT_ID")
+    boundary = uuid.uuid4().hex
+    caption = f"Markaz CRM zaxira: {b.objects_count} yozuv, {timezone.localtime(b.created_at):%Y-%m-%d %H:%M}"
+    parts = []
+    for k, v in (("chat_id", chat), ("caption", caption)):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="document"; filename="{_filename(b)}"\r\n'
+                  f"Content-Type: application/gzip\r\n\r\n").encode() + bytes(b.data) + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendDocument", data=b"".join(parts),
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        if json.loads(r.read().decode()).get("ok") is not True:
+            raise RuntimeError("Telegram javobi: ok emas")
+
+
+def _send_email(b):
+    from django.conf import settings
+    from django.core.mail import EmailMessage
+    to = [x.strip() for x in _env("BACKUP_EMAIL_TO").split(",") if x.strip()]
+    msg = EmailMessage(f"Markaz CRM zaxira {timezone.localtime(b.created_at):%Y-%m-%d}",
+                       f"Avtomatik zaxira nusxa: {b.objects_count} yozuv. Tiklash: Zaxira bo'limi -> Fayldan tiklash.",
+                       settings.DEFAULT_FROM_EMAIL, to)
+    msg.attach(_filename(b), bytes(b.data), "application/gzip")
+    msg.send(fail_silently=False)
+
+
+def send_offsite(pk):
+    """Nusxani sozlangan joylarga yuboradi. Natija Backup.sent ga yoziladi. Qaytaradi: (yuborildi, xatolar)."""
+    from django.db import close_old_connections
+    from .models import Backup
+    done, errors = [], []
+    try:
+        b = Backup.objects.get(pk=pk)
+        for name, fn in (("telegram", _send_telegram), ("email", _send_email)):
+            if name not in offsite_targets():
+                continue
+            try:
+                fn(b)
+                done.append(name)
+            except Exception as e:  # tarmoq xatosi zaxirani buzmasligi kerak
+                log.warning("Zaxira %s ga yuborilmadi: %s", name, e)
+                errors.append(f"{name}: {e.__class__.__name__}")
+        if done:
+            Backup.objects.filter(pk=pk).update(sent=", ".join(done))
+    finally:
+        close_old_connections()
+    return done, errors
