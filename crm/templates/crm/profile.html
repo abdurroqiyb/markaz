@@ -30,7 +30,7 @@
     <a class="btn" href="{% url 'grade_add' s.pk %}">Baho qo'yish</a>
     <a class="btn" href="{% url 'student_doc' s.pk 'shartnoma' %}">Shartnoma</a>
     <a class="btn" href="{% url 'student_doc' s.pk 'sertifikat' %}">Sertifikat</a>
-    {% if money and s.status == "faol" and g %}<a class="btn" href="{% url 'payment_add' %}?student={{ s.pk }}">To'lov</a>{% endif %}
+    {% if money and g and s.status == "faol" or money and total_debt > 0 %}<a class="btn" href="{% url 'payment_add' %}?student={{ s.pk }}">To'lov</a>{% endif %}
     {% if can_edit_students %}<a class="btn" href="{% url 'student_edit' s.pk %}">Tahrirlash</a>{% endif %}
     <a class="btn primary" href="{% url 'talabalar' %}">Yopish</a>
   </div>

@@ -30,7 +30,7 @@ FORMAT = "markaz-crm-backup"
 VERSION = 1
 
 # Saqlash tartibi: bog'liqliklar oldin keladi. Backup jadvalining o'zi kirmaydi.
-CRM_MODELS = ["Center", "Staff", "Group", "Lead", "LeadCall", "Student", "Payment", "Charge", "Lesson",
+CRM_MODELS = ["Center", "Staff", "Group", "Lead", "LeadCall", "Student", "StatusChange", "Payment", "Charge", "Lesson",
               "Attendance", "Grade", "Expense", "AdSpend", "Promo", "Script", "Task", "ActivityLog"]
 
 

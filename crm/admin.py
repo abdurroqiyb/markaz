@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from .models import (ActivityLog, AdSpend, Attendance, Center, Charge, Expense, Grade, Group,
-                     Lead, LeadCall, Lesson, Payment, Promo, Script, Staff, Student, Task)
+                     Lead, LeadCall, Lesson, Payment, Promo, Script, Staff, StatusChange, Student, Task)
 
 admin.site.site_header = "Markaz CRM boshqaruvi"
 admin.site.site_title = "Markaz CRM"
@@ -63,8 +63,15 @@ class LeadCallAdmin(admin.ModelAdmin):
     search_fields = ("lead__name", "text")
 
 
+class StatusChangeInline(admin.TabularInline):
+    model = StatusChange
+    extra = 0
+    fields = ("date", "status")
+
+
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
+    inlines = [StatusChangeInline]
     list_display = ("name", "phone", "group", "status", "join_date", "discount")
     list_filter = ("status", "group")
     search_fields = ("name", "phone", "parent")

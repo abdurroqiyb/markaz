@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Case, When
 from django.contrib.auth.password_validation import validate_password
 
 from . import services as sv
@@ -134,9 +135,13 @@ class PaymentForm(StyledModelForm):
 
     def __init__(self, *a, month=None, **kw):
         super().__init__(*a, **kw)
-        self.fields["student"].queryset = Student.objects.filter(status="faol").select_related("group").order_by("name")
+        # Faol talabalar va qarzi qolgan (muzlatilgan / tark etgan) talabalar ham to'lov qila oladi.
+        self.fields["student"].queryset = Student.objects.exclude(status="navbat").select_related("group") \
+            .order_by(Case(When(status="faol", then=0), default=1), "name")
         self.fields["student"].empty_label = None
-        self.fields["student"].label_from_instance = lambda s: s.name + (f" · {s.group.name}" if s.group else "")
+        st = dict(Student.STATUSES)
+        self.fields["student"].label_from_instance = lambda s: s.name + (f" · {s.group.name}" if s.group else "") + \
+            ("" if s.status == "faol" else f" ({st[s.status].lower()})")
         self.fields["month"].choices = sv.month_options(month or self.initial.get("month"), back=2, fwd=1)
         self.fields["amount"].widget.attrs["min"] = "1"
 

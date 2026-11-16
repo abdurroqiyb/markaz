@@ -421,3 +421,60 @@ class FeatureTest(Base):
         r = self.client.get(reverse("hisobotlar") + "?chop=1")
         self.assertContains(r, "Oylik hisobot")
         self.assertContains(r, "window.print()")
+
+
+class StatusHistoryTest(Base):
+    """Qarz talaba holati tarixi bo'yicha: muzlatilgan oylar qarz emas, ketgan talabaning eski qarzi qoladi."""
+
+    def setUp(self):
+        super().setUp()
+        self.g = Group.objects.create(name="A", price=100000)
+        self.now = sv.now_month()
+        self.m3 = sv.shift_month(self.now, -3)
+        self.s = Student.objects.create(name="Vali", group=self.g, join_date=date.fromisoformat(self.m3 + "-01"))
+
+    def _log(self, *pairs):
+        from .models import StatusChange
+        StatusChange.objects.filter(student=self.s).delete()
+        for d_, st in pairs:
+            StatusChange.objects.create(student=self.s, status=st, date=d_)
+
+    def test_frozen_months_not_debt_after_return(self):
+        m1, m2 = sv.shift_month(self.now, -2), sv.shift_month(self.now, -1)
+        Payment.objects.create(student=self.s, amount=100000, month=self.m3)
+        self._log((date.fromisoformat(self.m3 + "-01"), "faol"), (date.fromisoformat(m1 + "-01"), "muzlatilgan"),
+                  (sv.today(), "faol"))
+        Student.objects.filter(pk=self.s.pk).update(status="faol")
+        d = sv.Data()
+        self.s.refresh_from_db()
+        self.assertEqual(d.debt_for(self.s, m1), 0)
+        self.assertEqual(d.debt_for(self.s, m2), 0)
+        self.assertEqual(d.total_debt(self.s), 100000)  # faqat joriy oy
+
+    def test_left_student_keeps_old_debt(self):
+        self._log((date.fromisoformat(self.m3 + "-01"), "faol"), (sv.today(), "tark"))
+        Student.objects.filter(pk=self.s.pk).update(status="tark")
+        self.s.refresh_from_db()
+        d = sv.Data()
+        self.assertEqual(d.debt_for(self.s, self.now), 0)
+        self.assertEqual(d.total_debt(self.s), 300000)
+        r = self.client.get(reverse("tolovlar"))
+        self.assertContains(r, "Vali")
+        # ketgan talaba ham qarzini to'lay oladi
+        r = self.client.post(reverse("payment_add"), {"student": self.s.pk, "amount": 100000, "month": self.m3,
+                                                      "method": "Naqd", "date": sv.today().isoformat()})
+        self.assertEqual(r.status_code, 302)
+
+    def test_save_records_history(self):
+        from .models import StatusChange
+        self.assertEqual(list(StatusChange.objects.filter(student=self.s).values_list("status", flat=True)), ["faol"])
+        self.s.status = "muzlatilgan"
+        self.s.save()
+        self.client.post(reverse("student_activate", args=[self.s.pk]))
+        self.assertEqual(list(StatusChange.objects.filter(student=self.s).values_list("status", flat=True)),
+                         ["faol", "muzlatilgan", "faol"])
+        self.s.refresh_from_db()
+        self.assertIsNone(self.s.paused_at)
+
+    def test_api_debt_bad_input(self):
+        self.assertEqual(self.client.get(reverse("api_debt") + "?student=abc").status_code, 200)

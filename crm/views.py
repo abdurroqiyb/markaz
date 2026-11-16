@@ -131,7 +131,7 @@ def dashboard(request):
     exp = d.month_exp(d.NOW) if admin else 0
     expected = d.expected_for(d.NOW)
     rate = min(1, income / expected) if expected else 0
-    debt_rows = [(s, d.total_debt(s)) for s in faol]
+    debt_rows = [(s, d.total_debt(s)) for s in d.students]
     now = timezone.localtime()
     my_tasks = Task.objects.filter(done=False).filter(Q(assignee=u) | Q(assignee__isnull=True))
     chart = d.chart6(admin)
@@ -254,7 +254,8 @@ def talabalar(request):
             continue
         if q and q.lower() not in f"{s.name} {s.phone}".lower():
             continue
-        rows.append({"s": s, "g": d.group_of(s), "debt": d.debt_for(s, d.NOW)})
+        rows.append({"s": s, "g": d.group_of(s),
+                     "debt": d.debt_for(s, d.NOW) if s.status == "faol" else d.total_debt(s)})
     return render(request, "crm/talabalar.html", {
         "section": "talabalar", "rows": rows, "q": q, "gf": gf, "groups": d.groups,
         "total": len(d.students), "active": sum(1 for s in d.students if s.status == "faol"),
@@ -306,8 +307,8 @@ def student_delete(request, pk):
 @require_POST
 def student_activate(request, pk):
     s = get_object_or_404(Student, pk=pk)
-    s.status = "faol"
-    s.save(update_fields=["status"])
+    s.status, s.paused_at, s.return_date = "faol", None, None
+    s.save(update_fields=["status", "paused_at", "return_date"])
     log(request, f"Talaba o'zgartirildi: {s.name} (faollashtirildi)")
     messages.success(request, f"{s.name} faollashtirildi")
     return back(request, "dashboard")
@@ -522,7 +523,7 @@ def tolovlar(request):
     exp = d.expected_for(m)
     frozen = any(k[1] == m for k in d.charges)
     allrows = sorted([{"s": s, "t": d.total_debt(s), "od": d.overdue_months(s)}
-                      for s in d.students if s.status == "faol"], key=lambda r: -r["t"])
+                      for s in d.students], key=lambda r: -r["t"])
     allrows = [r for r in allrows if r["t"] > 0][:12]
     meth = [(n, sum(p.amount for p in pays if p.method == n)) for n, _ in Payment.METHODS]
     mmx = max([1] + [v for _, v in meth])
@@ -540,12 +541,13 @@ def tolovlar(request):
 @money_required
 def payment_add(request):
     m = sv.valid_month(request.GET.get("m") or request.POST.get("month"))
-    if not Student.objects.filter(status="faol").exists():
-        messages.error(request, "Avval faol talaba qo'shing")
+    if not Student.objects.exists():
+        messages.error(request, "Avval talaba qo'shing")
         return redirect("talabalar")
     d = sv.Data(request.user)
     sid = request.GET.get("student")
-    st = Student.objects.filter(pk=sid, status="faol").first() if sid else Student.objects.filter(status="faol").order_by("name").first()
+    st = (Student.objects.filter(pk=sid).first() if sid and sid.isdigit() else None) or \
+        Student.objects.filter(status="faol").order_by("name").first()
     initial = {"student": st, "month": m, "method": "Naqd", "date": sv.today(),
                "amount": d.debt_for(st, m) or None if st else None}
     form = PaymentForm(request.POST or None, initial=initial, month=m)
@@ -561,7 +563,8 @@ def payment_add(request):
 @money_required
 def api_debt(request):
     d = sv.Data(request.user)
-    s = d.student_map.get(int(request.GET.get("student") or 0))
+    sid = request.GET.get("student") or ""
+    s = d.student_map.get(int(sid)) if sid.isdigit() else None
     m = sv.valid_month(request.GET.get("m"))
     return JsonResponse({"debt": d.debt_for(s, m) if s else 0})
 
@@ -626,7 +629,8 @@ def xarajatlar(request):
     ex_sum = d.month_exp(m)
     sal = []
     for t in d.teacher_salaries(m):
-        paid = sum(x.amount for x in ex if x.category in ("Maosh", "Avans") and x.teacher == t["name"])
+        paid = sum(x.amount for x in ex if x.category in ("Maosh", "Avans")
+                   and x.teacher.strip().lower() == t["name"].strip().lower())
         sal.append({**t, "paid": paid, "rest": max(0, t["salary"] - paid),
                     "pct": min(100, round(paid / t["salary"] * 100)) if t["salary"] else 0})
     return render(request, "crm/xarajatlar.html", {"section": "xarajatlar", **month_nav(request, m), "ex": ex,
@@ -1197,7 +1201,7 @@ def export_xlsx(request):
     if is_director(request.user):
         sheets.append(("Xarajatlar", ["Sana", "Nomi", "Turkum", "Oy", "Summa", "O'qituvchi"],
                        [[x.date, x.title, x.category, x.month, x.amount, x.teacher] for x in d.expenses]))
-    deb = sorted([(s, d.total_debt(s)) for s in d.students if s.status == "faol"], key=lambda x: -x[1])
+    deb = sorted([(s, d.total_debt(s)) for s in d.students], key=lambda x: -x[1])
     sheets.append(("Qarzdorlar", ["Talaba", "Guruh", "Telefon", "Ota-ona", "Kechikkan oylar", "Jami qarz"],
                    [[s.name, gn(s.group_id), s.phone, s.parent, d.overdue_months(s), t] for s, t in deb if t > 0]))
     sheets.append((f"Kassa {d.NOW}", ["To'lov turi", "Summa"],
