@@ -1,0 +1,39 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Kabinet{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-t">
+    <p class="hero-k">{% if own %}O'qituvchi kabineti{% else %}O'qituvchi kabineti · ko'rish rejimi{% endif %}</p>
+    <h1>{% if own %}{{ greet }}, {{ first }}{% else %}{{ t.get_full_name|default:t.username }}{% endif %}</h1>
+    <p>{% if cab.today_rows %}Bugun {{ cab.today_rows|length }} ta dars bor.{% else %}Bugun dars yo'q.{% endif %} {{ cab.rows|length }} ta guruh, {{ cab.students }} ta faol talaba.</p>
+    {% if own %}<div class="tools" style="margin-top:14px"><a class="btn heroBtn" href="{% url 'davomat' %}">Davomat olish</a><a class="btn heroBtn" href="{% url 'jadval' %}">Jadval</a><a class="btn heroBtn" href="{% url 'parol' %}">Parolni almashtirish</a></div>{% endif %}
+  </div>
+  <div class="hero-r">{% ring cab.att_p 104 11 "#7FB0FF" cab.att_label "rgba(255,255,255,.18)" "#fff" %}<span>{{ cab.now_label }}<br>davomat</span></div>
+</section>
+{% if others %}<div class="chips">{% for x in others %}<a class="chip" href="?t={{ x.pk }}" aria-pressed="{% if x == t %}true{% else %}false{% endif %}">{{ x.get_full_name|default:x.username }}</a>{% endfor %}</div>{% endif %}
+<div class="tiles">
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "users" %}</span>Guruhlarim</div><div class="num">{{ cab.rows|length }}</div><div class="hint">{{ cab.students }} ta faol talaba</div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "cal" %}</span>Shu oy darslar</div><div class="num">{{ cab.lessons }}</div><div class="hint">Davomat olingan darslar</div></div>
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "check" %}</span>Davomat</div><div class="num">{% if cab.att is not None %}{{ cab.att }}%{% else %}-{% endif %}</div><div class="hint">{{ cab.now_label }}</div></div>
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "wallet" %}</span>Shu oy maosh</div><div class="num">{{ cab.sal|som }}<small>so'm</small></div><div class="hint">Taxminiy, to'lovlarga qarab o'zgaradi</div></div>
+</div>
+{% if not cab.rows %}
+<div class="empty"><h2>Sizga hali guruh biriktirilmagan</h2><p>Direktor yoki administrator guruh sozlamasida "O'qituvchi hisobi" sifatida sizni tanlasa, guruhlaringiz shu yerda chiqadi.</p></div>
+{% else %}
+<div class="cols">
+  <section class="panel"><h2>Bugungi darslar</h2>
+    {% for r in cab.today_rows %}<div class="mini"><span><b>{{ r.g.name }}</b><br><small class="mut">{{ r.time|default:"vaqt yozilmagan" }}{% if r.g.room %} · {{ r.g.room }}{% endif %} · {{ r.n }} talaba</small></span>{% if own %}<a class="btn sm primary" href="{% url 'davomat' %}?g={{ r.g.pk }}&d={{ today|date:'Y-m-d' }}">Davomat</a>{% endif %}</div>
+    {% empty %}<p class="mut m0">Bugun dars yo'q.</p>{% endfor %}
+  </section>
+  <section class="panel"><h2>Maosh dinamikasi</h2><div class="vchart" data-src="chart-sal" data-chart='{"type":"bars","series":[{"key":"sal","label":"Maosh","color":"var(--good)"}],"unit":"so&#39;m"}'></div>{{ cab.six|json_script:"chart-sal" }}</section>
+</div>
+<section class="panel"><h2>Guruhlarim</h2><div class="tblwrap"><table class="tbl"><thead><tr><th>Guruh</th><th>Kunlar</th><th class="r">Talaba</th><th class="r">Darslar</th><th>Davomat</th><th>Maosh turi</th><th class="r">Shu oy maosh</th><th></th></tr></thead><tbody>
+{% for r in cab.rows %}<tr><td><b>{{ r.g.name }}</b>{% if r.g.course %}<br><small class="mut">{{ r.g.course }}</small>{% endif %}</td><td>{{ r.g.days|default:"-" }}<br><small class="mut">{{ r.time }}{% if r.next %} · {{ r.next }}{% endif %}</small></td><td class="r">{{ r.n }}</td><td class="r">{{ r.lessons }}</td>
+<td style="min-width:110px">{% if r.att is not None %}<div class="hbar {% if r.att < 70 %}bad{% elif r.att < 85 %}warn{% endif %}"><i style="width:{{ r.att }}%"></i></div><small class="mut">{{ r.att }}%</small>{% else %}<small class="mut">-</small>{% endif %}</td>
+<td><small>{{ r.model }}</small></td><td class="r money">{{ r.sal|som }}</td>
+<td class="r">{% if own %}<a class="btn sm ghost" href="{% url 'davomat' %}?g={{ r.g.pk }}">Davomat</a> <a class="btn sm ghost" href="{% url 'talabalar' %}?g={{ r.g.pk }}">Talabalar</a>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endif %}
+{% if own %}<section class="panel"><h2>Vazifalarim</h2>{% for t in tasks %}<div class="mini"><span>{{ t.title }}{% if t.due %}<br><small class="mut">{{ t.due|date:"Y-m-d" }}</small>{% endif %}</span></div>{% empty %}<p class="mut m0">Ochiq vazifa yo'q.</p>{% endfor %}</section>{% endif %}
+{% endblock %}

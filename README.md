@@ -87,7 +87,16 @@ Neon bepul tarifi kichik o'quv markaz uchun yetarli (0.5 GB joy).
 Boshqa variant: pullik Render tarifida doimiy disk ulash. Buning uchun `render.yaml` dagi `disk`
 blokini va `SQLITE_PATH=/var/data/db.sqlite3` qatorini izohdan chiqaring.
 
-Muntazam zaxira uchun: **Asosiy → Excelga yuklab olish** barcha ma'lumotlarni .xlsx qilib beradi.
+`DATABASE_URL` berilmagan bo'lsa, direktor har sahifada qizil ogohlantirishni ko'radi.
+
+## Zaxira nusxa
+
+- Tizimdan foydalanilganda **kuniga bir marta avtomatik** zaxira olinadi (gzip JSON, bazada, oxirgi 30 tasi saqlanadi).
+- **Zaxira** bo'limi (faqat direktor): nusxalar ro'yxati, "Hozir zaxira olish", faylni yuklab olish,
+  nusxadan yoki fayldan tiklash (TIKLASH so'zi bilan tasdiqlanadi, avval joriy holat ham zaxiralanadi).
+- Buyruqlar: `python manage.py backup_db --file zaxira.json.gz`, `python manage.py restore_db zaxira.json.gz --yes`.
+- Bazaning o'zi yo'qolsa ham qolishi uchun vaqti-vaqti bilan faylni kompyuterga yuklab oling.
+  Excel eksport (**Asosiy → Excelga yuklab olish**) ham mavjud.
 
 ## Muhit o'zgaruvchilari
 
@@ -107,10 +116,14 @@ Muntazam zaxira uchun: **Asosiy → Excelga yuklab olish** barcha ma'lumotlarni 
 
 - **Direktor** (superuser): hamma bo'lim, shu jumladan xarajat, hisobot, jurnal, xodimlar.
 - **Administrator**: lid, talaba, guruh, jadval, davomat, to'lov, vazifa.
-- **O'qituvchi**: jadval, davomat, baho, talabalar (pul ko'rinmaydi), vazifa.
+- **O'qituvchi**: o'z kabineti (guruhlari, bugungi darslar, davomat, o'z maoshi), faqat o'z guruhlari
+  bo'yicha jadval, davomat, talabalar va baho (talaba qo'sha/o'chira olmaydi, pul ko'rinmaydi), vazifa.
+  Guruh sozlamasida "O'qituvchi hisobi"ni tanlang (yoki guruhdagi o'qituvchi ismi xodimning to'liq ismi bilan bir xil bo'lsin).
 - **Marketolog**: lid, marketing, vazifa, jadval.
 
-Xodimlarni **Xodimlar** bo'limida login/parol bilan qo'shasiz va rol berasiz. Rollar server tomonida
+Xodimlarni **Xodimlar** bo'limida login/parol bilan qo'shasiz va rol berasiz. "Huquq va parol" sahifasida
+xodimga bo'limlarni alohida belgilash, parolini yangilash mumkin; bloklangan xodimni qayta tiklash mumkin.
+Har bir xodim o'z parolini chap pastdagi **Parol** tugmasi orqali almashtiradi. Xodimlar, jurnal va zaxira faqat direktorga. Rollar server tomonida
 tekshiriladi (HTML versiyadagidek faqat menyuni yashirish emas).
 
 ## HTML versiyaga nisbatan nima kuchaydi

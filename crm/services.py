@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from .models import (AdSpend, Attendance, Center, Charge, Expense, Group, Lead,
                      Lesson, Payment, Promo, Student)
+from .roles import is_teacher_scoped
 
 MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust",
           "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
@@ -137,17 +138,43 @@ def conflicts(groups):
 
 
 # ---------------------------------------------------------------- asosiy hisob
-class Data:
-    """Bitta so'rov uchun ma'lumotlar va hisob-kitoblar."""
+def teacher_names(user):
+    """O'qituvchi guruhga matn sifatida qanday yozilgan bo'lishi mumkin."""
+    names = {user.get_full_name().strip().lower(), user.username.lower()}
+    return {n for n in names if n}
 
-    def __init__(self):
+
+def is_my_group(g, user):
+    if g.teacher_user_id:
+        return g.teacher_user_id == user.id
+    return bool(g.teacher) and g.teacher.strip().lower() in teacher_names(user)
+
+
+def my_group_ids(user):
+    """O'qituvchiga tegishli guruhlar; cheklanmagan foydalanuvchi uchun None."""
+    if user is None or not is_teacher_scoped(user):
+        return None
+    return {g.id for g in Group.objects.all() if is_my_group(g, user)}
+
+
+class Data:
+    """Bitta so'rov uchun ma'lumotlar va hisob-kitoblar.
+
+    `user` o'qituvchi bo'lsa, guruhlar, talabalar va to'lovlar faqat uning
+    guruhlari bilan cheklanadi.
+    """
+
+    def __init__(self, user=None):
         self.NOW = now_month()
         self.TODAY = today()
+        self.user = user
+        self.scope = my_group_ids(user)
 
     # --- yuklash
     @cached_property
     def groups(self):
-        return list(Group.objects.all())
+        gs = list(Group.objects.all())
+        return gs if self.scope is None else [g for g in gs if g.id in self.scope]
 
     @cached_property
     def group_map(self):
@@ -155,7 +182,8 @@ class Data:
 
     @cached_property
     def students(self):
-        return list(Student.objects.all())
+        ss = list(Student.objects.all())
+        return ss if self.scope is None else [x for x in ss if x.group_id in self.scope]
 
     @cached_property
     def student_map(self):
@@ -167,7 +195,11 @@ class Data:
 
     @cached_property
     def payments(self):
-        return list(Payment.objects.all())
+        ps = list(Payment.objects.all())
+        if self.scope is None:
+            return ps
+        ids = set(self.student_map)
+        return [p for p in ps if p.student_id in ids]
 
     @cached_property
     def expenses(self):
@@ -393,11 +425,10 @@ class Data:
 
     def lessons_today(self, user=None):
         d = self.TODAY.weekday()
-        first = ((user.first_name or user.username) if user else "").split(" ")[0].lower()
         rows = []
         for g in sorted([g for g in self.groups if d in parse_days(g.days)],
                         key=lambda g: (parse_time(g.time) or (0,))[0]):
-            mine = bool(first and g.teacher and first in g.teacher.lower())
+            mine = bool(user and is_my_group(g, user))
             rows.append({"g": g, "time": time_range(g), "mine": mine})
         return rows
 
@@ -524,3 +555,42 @@ Summa: {fmt(p.amount)} so'm
 To'lov turi: {p.method or "-"}
 
 Qabul qildi: ______________"""
+
+
+# ---------------------------------------------------------------- o'qituvchi kabineti
+def cabinet(d, groups):
+    """O'qituvchi kabineti: guruhlari, bugungi darslar, davomat va maosh (6 oy)."""
+    m, tdy = d.NOW, d.TODAY.weekday()
+    rows = []
+    for g in groups:
+        lessons = [l for l in d.lessons if l.group_id == g.id and mkey(l.date) == m]
+        marks = [st for l in lessons for st in d.marks.get(l.id, {}).values()]
+        came = sum(1 for st in marks if st == "keldi")
+        days = parse_days(g.days)
+        nxt = None
+        for k in range(0, 7):
+            if (tdy + k) % 7 in days:
+                nxt = "Bugun" if k == 0 else "Ertaga" if k == 1 else DAYF[(tdy + k) % 7]
+                break
+        rows.append({"g": g, "n": d.active_in(g), "time": time_range(g), "today": tdy in days, "next": nxt,
+                     "lessons": len(lessons), "att": pct(came, len(marks)) if marks else None,
+                     "sal": d.group_salary(g, m), "model": g.get_pay_model_display()})
+    six = []
+    for n in range(-5, 1):
+        k = shift_month(m, n)
+        six.append({"k": k, "label": mlabel(k), "short": SHORT[int(k[5:]) - 1],
+                    "sal": sum(d.group_salary(g, k) for g in groups)})
+    tot_marks = sum(len(d.marks.get(l.id, {})) for l in d.lessons
+                    if l.group_id in {g.id for g in groups} and mkey(l.date) == m)
+    tot_came = sum(1 for l in d.lessons if l.group_id in {g.id for g in groups} and mkey(l.date) == m
+                   for st in d.marks.get(l.id, {}).values() if st == "keldi")
+    return {
+        "rows": sorted(rows, key=lambda r: (not r["today"], (parse_time(r["g"].time) or (0,))[0])),
+        "today_rows": [r for r in rows if r["today"]],
+        "students": sum(r["n"] for r in rows), "sal": sum(r["sal"] for r in rows),
+        "lessons": sum(r["lessons"] for r in rows),
+        "att": pct(tot_came, tot_marks) if tot_marks else None,
+        "att_p": tot_came / tot_marks if tot_marks else 0,
+        "att_label": f"{pct(tot_came, tot_marks)}%" if tot_marks else "-",
+        "six": six, "now_label": mlabel(m),
+    }

@@ -1,4 +1,11 @@
-"""Rollar va bo'limlarga kirish huquqi (HTML versiyadagi ACCESS jadvali)."""
+"""Rollar va bo'limlarga kirish huquqi.
+
+Har bir xodim o'z login/paroli bilan kiradi. Qaysi bo'limlar ochiqligi:
+  1) direktor (superuser yoki "direktor" roli) - hamma narsa;
+  2) xodimga direktor alohida bo'limlar belgilagan bo'lsa - faqat o'shalar;
+  3) aks holda rol bo'yicha standart ro'yxat (ACCESS).
+O'qituvchi esa ma'lumot darajasida ham cheklanadi: faqat o'z guruhlari va talabalari.
+"""
 from functools import wraps
 
 from django.contrib import messages
@@ -11,19 +18,26 @@ ROLES = {"direktor": "Direktor", "administrator": "Administrator",
 ACCESS = {
     "administrator": ["bugun", "dashboard", "lidlar", "talabalar", "guruhlar", "jadval", "davomat",
                       "tolovlar", "vazifalar", "qidiruv"],
-    "oqituvchi": ["bugun", "jadval", "davomat", "talabalar", "vazifalar", "qidiruv"],
+    "oqituvchi": ["kabinet", "bugun", "jadval", "davomat", "talabalar", "vazifalar", "qidiruv"],
     "marketolog": ["bugun", "lidlar", "marketing", "vazifalar", "jadval", "qidiruv"],
 }
-ADMIN_ONLY = ["xarajatlar", "jurnal", "xodimlar", "hisobotlar"]
+# Faqat direktor: boshqa xodimga ham berib bo'lmaydi.
+DIRECTOR_ONLY = ["xodimlar", "jurnal", "zaxira"]
+# Standart holatda faqat direktor, lekin direktor xodimga alohida ochib berishi mumkin.
+ADMIN_ONLY = ["xarajatlar", "hisobotlar"] + DIRECTOR_ONLY
 
 NAV = [
+    ("kabinet", "Kabinetim", "book"),
     ("bugun", "Bugun", "sun"), ("dashboard", "Asosiy", "home"), ("lidlar", "Lidlar", "funnel"),
     ("talabalar", "Talabalar", "cap"), ("guruhlar", "Guruhlar", "users"), ("jadval", "Jadval", "cal"),
     ("davomat", "Davomat", "check"), ("tolovlar", "To'lovlar", "wallet"), ("vazifalar", "Vazifalar", "task"),
     ("marketing", "Marketing", "mega"), ("hisobotlar", "Hisobotlar", "chart"),
     ("xarajatlar", "Xarajatlar", "receipt"), ("xodimlar", "Xodimlar", "badge"),
-    ("jurnal", "Jurnal", "clock"), ("qidiruv", "Qidiruv", "search"),
+    ("jurnal", "Jurnal", "clock"), ("zaxira", "Zaxira", "shield"), ("qidiruv", "Qidiruv", "search"),
 ]
+SECTION_LABELS = {k: t for k, t, _ in NAV}
+# Direktor xodimga belgilab berishi mumkin bo'lgan bo'limlar.
+GRANTABLE = [k for k, _, _ in NAV if k not in DIRECTOR_ONLY]
 
 
 def role_of(user):
@@ -35,27 +49,42 @@ def role_of(user):
     return staff.role if staff else "oqituvchi"
 
 
-def allowed(user, section):
+def sections_of(user):
+    """Foydalanuvchiga ochiq bo'limlar ro'yxati (NAV tartibida)."""
     r = role_of(user)
     if r is None:
-        return False
+        return []
     if r == "direktor":
-        return True
-    if section in ADMIN_ONLY:
-        return False
-    return section in ACCESS.get(r, [])
+        return [k for k, _, _ in NAV]
+    staff = getattr(user, "staff", None)
+    custom = [k for k in (staff.sections if staff else None) or [] if k in GRANTABLE]
+    base = custom or ACCESS.get(r, [])
+    return [k for k, _, _ in NAV if k in base and k not in DIRECTOR_ONLY]
+
+
+def allowed(user, section):
+    return section in sections_of(user)
 
 
 def can_money(user):
-    return role_of(user) in ("direktor", "administrator")
+    return allowed(user, "tolovlar")
 
 
 def is_director(user):
     return role_of(user) == "direktor"
 
 
+def is_teacher_scoped(user):
+    """O'qituvchi faqat o'z guruhlari ma'lumotini ko'radi."""
+    return role_of(user) == "oqituvchi"
+
+
 def home_section(user):
-    return "dashboard" if allowed(user, "dashboard") else "bugun"
+    secs = sections_of(user)
+    for k in ("dashboard", "kabinet", "bugun"):
+        if k in secs:
+            return k
+    return secs[0] if secs else "parol"
 
 
 def section_required(section):
@@ -77,7 +106,7 @@ def money_required(view):
     @wraps(view)
     def inner(request, *a, **kw):
         if not can_money(request.user):
-            messages.error(request, "Moliyaviy amallar faqat direktor va administrator uchun.")
+            messages.error(request, "Moliyaviy amallarga kirish huquqingiz yo'q.")
             return redirect(home_section(request.user))
         return view(request, *a, **kw)
     return inner

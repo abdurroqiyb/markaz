@@ -75,6 +75,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "crm.middleware.DailyBackupMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -122,6 +123,16 @@ else:
             "OPTIONS": {"timeout": 20},
         }
     }
+
+# Ma'lumotlar doimiy saqlanadimi? Render free tarifida SQLite fayli har deployda o'chadi.
+DB_ENGINE = "PostgreSQL" if DATABASE_URL.startswith("postgres") else ("SQLite" if not DATABASE_URL else "Tashqi baza")
+DB_PERSISTENT = bool(DATABASE_URL) or bool(os.environ.get("SQLITE_PATH")) or not IS_RENDER
+if not DB_PERSISTENT:
+    import sys
+
+    print("=" * 70 + "\nDIQQAT: DATABASE_URL berilmagan. Render'da SQLite fayli har deploy va qayta\n"
+          "ishga tushishda O'CHIB KETADI. Ma'lumotlar saqlanishi uchun Neon PostgreSQL ulang\n"
+          "(README: 'Ma'lumotlar saqlanib qolishi uchun').\n" + "=" * 70, file=sys.stderr)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
