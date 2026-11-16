@@ -22,6 +22,7 @@ from crm.models import (AdSpend, Center, Attendance, Expense, Grade, Group, Grou
 DEMO_USERS = [  # login, ism, familiya, rol
     ("demo.admin", "Gulnora", "Saidova", "administrator"),
     ("demo.marketolog", "Jasur", "Qodirov", "marketolog"),
+    ("demo.yunusobod", "Kamola", "Ahmedova", "administrator"),  # faqat Yunusobod filialini ko'radi
     ("demo.dilnoza", "Dilnoza", "Karimova", "oqituvchi"),
     ("demo.sardor", "Sardor", "Aliyev", "oqituvchi"),
     ("demo.malika", "Malika", "Tursunova", "oqituvchi"),
@@ -80,56 +81,77 @@ def create_demo(seed=2026):
     center.demo_code = code
     center.save(update_fields=["demo_code"])
 
-    # --- demo xodimlar
-    users = {}
-    for login, fn, ln, role in DEMO_USERS:
-        u = User.objects.filter(username=login).first()
-        if not u:
-            u = User.objects.create_user(login, password=code, first_name=fn, last_name=ln)
-        else:
-            u.set_password(code)
-            u.is_active = True
-            u.save()
-        Staff.objects.update_or_create(user=u, defaults={"role": role, "phone": _phone(rnd)})
-        users[login] = u
+    # --- demo xodimlar (parol xeshi bir marta hisoblanadi: tez ishlashi uchun)
+    from django.contrib.auth.hashers import make_password
+    pw = make_password(code)
+    existing = {u.username: u for u in User.objects.filter(username__in=[x[0] for x in DEMO_USERS])}
+    new_users = [User(username=l, first_name=fn, last_name=ln, password=pw)
+                 for l, fn, ln, _ in DEMO_USERS if l not in existing]
+    User.objects.bulk_create(new_users)
+    User.objects.filter(username__in=list(existing)).update(password=pw, is_active=True)
+    users = {u.username: u for u in User.objects.filter(username__in=[x[0] for x in DEMO_USERS])}
+    Staff.objects.filter(user__in=users.values()).delete()
+    Staff.objects.bulk_create([Staff(user=users[l], role=r, phone=_phone(rnd)) for l, _, _, r in DEMO_USERS])
 
-    # --- guruhlar
-    groups = []
+    # --- filiallar (2 ta) va guruhlar
+    from crm.models import Branch
+    br = []
+    for nm, addr in (("Chilonzor (namuna)", "Chilonzor, 9-kvartal"), ("Yunusobod (namuna)", "Yunusobod, 4-mavze")):
+        br.append(Branch.objects.get_or_create(name=nm, defaults={"address": addr, "is_demo": True})[0])
+    Staff.objects.filter(user=users["demo.yunusobod"]).update(filial=br[1])
     start = date.fromisoformat(sv.shift_month(now, -6) + "-01")
+    groups = []
     for i, (name, course, t, days, time, room, price, cap, pm, pv) in enumerate(GROUPS):
         u = users[t]
-        g = Group.objects.create(name=name, course=course, teacher=u.get_full_name(), teacher_user=u, days=days,
-                                 time=time, room=room, price=price, capacity=cap, pay_model=pm, pay_value=pv,
-                                 teacher_pct=35, start_date=start + timedelta(days=7 * (i % 3)),
-                                 end_date=today + timedelta(days=10) if i == 6 else None, branch="", is_demo=True)
-        groups.append(g)
+        groups.append(Group(name=name, course=course, teacher=u.get_full_name(), teacher_user=u, days=days,
+                            time=time, room=room, price=price, capacity=cap, pay_model=pm, pay_value=pv,
+                            teacher_pct=35, start_date=start + timedelta(days=7 * (i % 3)),
+                            end_date=today + timedelta(days=10) if i == 6 else None, is_demo=True,
+                            filial=br[0] if i % 3 != 2 else br[1], branch=(br[0] if i % 3 != 2 else br[1]).name))
+    Group.objects.bulk_create(groups)
+    groups = list(Group.objects.filter(is_demo=True).order_by("id"))
 
     # --- lidlar (6 oy)
     sources = ["Instagram"] * 5 + ["Telegram"] * 3 + ["Tanish-bilishlar"] * 3 + ["Reklama", "Sayt (ariza)", "Boshqa"]
-    leads = []
+    leads, created_at = [], []
     for i in range(70):
         created = today - timedelta(days=rnd.randint(0, 175))
         st = rnd.choices(["yangi", "aloqa", "sinov", "yozildi", "rad"], [8, 10, 6, 14, 9])[0]
         if (today - created).days > 40 and st in ("yangi",):
             st = rnd.choice(["yozildi", "rad", "aloqa"])
         g = rnd.choice(groups)
-        l = Lead.objects.create(name=_name(rnd, rnd.random() < .5), phone=_phone(rnd), course=g.course,
-                                source=rnd.choice(sources), status=st, is_demo=True,
-                                next_contact=today + timedelta(days=rnd.randint(-2, 3)) if st in ("yangi", "aloqa") else None,
-                                trial_date=today + timedelta(days=rnd.randint(0, 4)) if st == "sinov" else None,
-                                trial_result=rnd.choice(["keldi", "qiziqmadi", "kelmadi"]) if st in ("yozildi", "rad") and rnd.random() < .6 else "",
-                                note=rnd.choice(LEAD_NOTES) if rnd.random() < .5 else "")
-        Lead.objects.filter(pk=l.pk).update(created_at=timezone.make_aware(
-            datetime.combine(created, dtime.min)) + timedelta(hours=rnd.randint(9, 19)))
-        if st != "yangi":
-            for k in range(rnd.randint(1, 3)):
-                LeadCall.objects.create(lead=l, text=rnd.choice(LEAD_NOTES), date=created + timedelta(days=k * 2),
-                                        is_demo=True)
-        leads.append(l)
+        leads.append(Lead(name=_name(rnd, rnd.random() < .5), phone=_phone(rnd), course=g.course,
+                          source=rnd.choice(sources), status=st, is_demo=True,
+                          next_contact=today + timedelta(days=rnd.randint(-2, 3)) if st in ("yangi", "aloqa") else None,
+                          trial_date=today + timedelta(days=rnd.randint(0, 4)) if st == "sinov" else None,
+                          trial_result=rnd.choice(["keldi", "qiziqmadi", "kelmadi"])
+                          if st in ("yozildi", "rad") and rnd.random() < .6 else "",
+                          note=rnd.choice(LEAD_NOTES) if rnd.random() < .5 else ""))
+        created_at.append((created, timezone.make_aware(datetime.combine(created, dtime.min))
+                           + timedelta(hours=rnd.randint(9, 19))))
+    Lead.objects.bulk_create(leads)
+    leads = list(Lead.objects.filter(is_demo=True).order_by("id"))
+    calls = []
+    for l, (created, at) in zip(leads, created_at):
+        l.created_at = at
+        if l.status != "yangi":
+            calls += [LeadCall(lead=l, text=rnd.choice(LEAD_NOTES), date=created + timedelta(days=k * 2), is_demo=True)
+                      for k in range(rnd.randint(1, 3))]
+    Lead.objects.bulk_update(leads, ["created_at"])
+    LeadCall.objects.bulk_create(calls)
     won = [l for l in leads if l.status == "yozildi"]
 
-    # --- talabalar
-    students = []
+    # --- talabalar (holat va guruh tarixi bilan)
+    used = set(Student.objects.exclude(code="").values_list("code", flat=True))
+
+    def new_code():
+        while True:
+            c = f"{rnd.randint(100000, 999999)}"
+            if c not in used:
+                used.add(c)
+                return c
+
+    students, hist = [], []
     for i in range(86):
         g = groups[i % len(groups)]
         # markaz avvaldan ishlayapti: yarmi boshidan o'qiydi, qolganlari har oy qo'shilgan
@@ -137,55 +159,51 @@ def create_demo(seed=2026):
         if join > today:
             join = today - timedelta(days=3)
         st = rnd.choices(["faol", "muzlatilgan", "tark", "navbat"], [60, 4, 7, 4])[0]
-        female = rnd.random() < .5
-        s = Student(name=_name(rnd, female), phone=_phone(rnd), parent=_phone(rnd), group=g, join_date=join,
-                    status="faol", discount=rnd.choice([0] * 8 + [30000, 50000]), is_demo=True,
+        s = Student(name=_name(rnd, rnd.random() < .5), phone=_phone(rnd), parent=_phone(rnd), group=g,
+                    join_date=join, status=st, discount=rnd.choice([0] * 8 + [30000, 50000]), is_demo=True,
+                    filial_id=g.filial_id,
+                    code=new_code(),
                     birth_date=date(today.year - rnd.randint(10, 22), rnd.randint(1, 12), rnd.randint(1, 28)),
                     lead=won.pop() if won and rnd.random() < .7 else None)
         if i < 2:  # bu haftada tug'ilgan kun
             s.birth_date = (today + timedelta(days=i * 2)).replace(year=today.year - 15)
-        s.save()
-        s._final = st
-        students.append(s)
-
-    # holat tarixi: muzlatish / ketish sanalari
-    for s in students:
-        st = s._final
-        if st == "faol":
-            continue
-        StatusChange.objects.filter(student=s).delete()
-        StatusChange.objects.create(student=s, status="faol", date=s.join_date)
-        if st == "navbat":
-            StatusChange.objects.filter(student=s).delete()
-            StatusChange.objects.create(student=s, status="navbat", date=s.join_date)
-            Student.objects.filter(pk=s.pk).update(status="navbat")
-        else:
-            when = min(today, s.join_date + timedelta(days=rnd.randint(25, 90)))
-            StatusChange.objects.create(student=s, status=st, date=when)
-            upd = {"status": st}
+        steps = [(join, "faol")] if st != "navbat" else [(join, "navbat")]
+        if st in ("muzlatilgan", "tark"):
+            when = min(today, join + timedelta(days=rnd.randint(25, 90)))
+            steps.append((when, st))
             if st == "muzlatilgan":
-                upd.update(paused_at=when, return_date=today + timedelta(days=rnd.randint(1, 20)))
-            Student.objects.filter(pk=s.pk).update(**upd)
-        s.status = st
-
+                s.paused_at, s.return_date = when, today + timedelta(days=rnd.randint(1, 20))
+        students.append(s)
+        hist.append(steps)
     # bitta talaba guruh almashtirgan
-    mover = next(s for s in students if s.status == "faol" and s.join_date < today - timedelta(days=80))
-    old_g, new_g = mover.group, next(g for g in groups if g.course == mover.group.course and g != mover.group) \
-        if any(g.course == mover.group.course and g != mover.group for g in groups) else groups[0]
-    GroupChange.objects.filter(student=mover).delete()
-    GroupChange.objects.create(student=mover, group=old_g, date=mover.join_date)
-    GroupChange.objects.create(student=mover, group=new_g, date=today - timedelta(days=40))
-    Student.objects.filter(pk=mover.pk).update(group=new_g)
+    mi = next(i for i, s in enumerate(students) if s.status == "faol" and s.join_date < today - timedelta(days=80))
+    mover = students[mi]
+    old_g = mover.group
+    new_g = next((g for g in groups if g.course == old_g.course and g != old_g), groups[0])
+    mover.group = new_g
+    Student.objects.bulk_create(students)
+    students = list(Student.objects.filter(is_demo=True).order_by("id"))
+    why = ["narx", "vaqt", "vaqt", "kochdi", "natija", "ustoz", "tugatdi", "boshqa_markaz", "narx"]
+    StatusChange.objects.bulk_create([StatusChange(student=s, status=st, date=dt,
+                                                   reason=rnd.choice(why) if st == "tark" else "")
+                                      for s, steps in zip(students, hist) for dt, st in steps])
+    gch = [GroupChange(student=s, group_id=s.group_id, date=s.join_date) for s in students if s.pk != students[mi].pk]
+    gch += [GroupChange(student=students[mi], group=old_g, date=students[mi].join_date),
+            GroupChange(student=students[mi], group=new_g, date=today - timedelta(days=40))]
+    GroupChange.objects.bulk_create(gch)
 
     # do'st olib kelgan
+    refs = []
     for a, b in zip(students[3:9:2], students[10:16:2]):
-        Student.objects.filter(pk=b.pk).update(referrer=a, referral_paid=rnd.random() < .5)
+        b.referrer, b.referral_paid = a, rnd.random() < .5
+        refs.append(b)
+    Student.objects.bulk_update(refs, ["referrer", "referral_paid"])
 
     # --- to'lovlar: ko'pchilik o'z vaqtida, ba'zilar qisman yoki kechikkan
     d = sv.Data()
     methods = ["Naqd"] * 5 + ["Karta"] * 4 + ["O'tkazma"]
     pays = []
-    for s in Student.objects.filter(is_demo=True):
+    for s in students:
         s = d.student_map[s.pk]
         habit = rnd.choices(["good", "late", "partial", "bad"], [66, 18, 11, 5])[0]
         for m in d.months_of(s):
@@ -216,9 +234,10 @@ def create_demo(seed=2026):
 
     # oxirgi kunlar kassasi yopilgan (bittasida kichik farq bilan)
     from crm.models import CashClose
+    closed = set(CashClose.objects.filter(date__gte=today - timedelta(days=6)).values_list("date", flat=True))
     for k in range(1, 6):
         day = today - timedelta(days=k)
-        if CashClose.objects.filter(date=day).exists():
+        if day in closed:
             continue
         t = {"Naqd": 0, "Karta": 0, "O'tkazma": 0}
         for p in pays:
@@ -235,30 +254,35 @@ def create_demo(seed=2026):
               "Matematika": ["Tenglamalar", "Funksiyalar", "Masalalar yechish", "Geometriya", "Test yechish"],
               "Rus tili": ["Kelishiklar", "Fe'l zamonlari", "Matn bilan ishlash", "So'zlashuv"],
               "IT": ["Word va Excel", "Python: o'zgaruvchilar", "Shartlar va sikllar", "Funksiyalar", "Amaliy loyiha"]}
-    marks = []
+    plan = []  # (dars, [talaba, holat])
+    act = [x for x in students if x.status == "faol"]
     for g in groups:
-        studs = [s for s in Student.objects.filter(group=g, status="faol")]
-        weak = {s.pk for s in studs if rnd.random() < .12}
+        studs = [x for x in act if x.group_id == g.pk]
+        weak = {x.pk for x in studs if rnd.random() < .12}
         day = today - timedelta(days=42)
         while day <= today:
             if day.weekday() in sv.parse_days(g.days):
-                l = Lesson.objects.create(group=g, date=day, topic=rnd.choice(topics.get(g.course, ["Takrorlash"])),
-                                          homework=f"{rnd.randint(10, 60)}-bet, {rnd.randint(1, 8)}-mashq"
-                                          if rnd.random() < .8 else "", is_demo=True)
-                for s in studs:
-                    if s.join_date and s.join_date > day:
+                l = Lesson(group=g, date=day, topic=rnd.choice(topics.get(g.course, ["Takrorlash"])),
+                           homework=f"{rnd.randint(10, 60)}-bet, {rnd.randint(1, 8)}-mashq"
+                           if rnd.random() < .8 else "", is_demo=True)
+                ms = []
+                for x in studs:
+                    if x.join_date and x.join_date > day:
                         continue
-                    p = .55 if s.pk in weak else .92
+                    p = .55 if x.pk in weak else .92
                     r = rnd.random()
-                    st = "keldi" if r < p else "sababli" if r < p + (1 - p) / 2 else "kelmadi"
-                    marks.append(Attendance(lesson=l, student=s, status=st))
+                    ms.append((x, "keldi" if r < p else "sababli" if r < p + (1 - p) / 2 else "kelmadi"))
+                plan.append((l, ms))
             day += timedelta(days=1)
+    Lesson.objects.bulk_create([l for l, _ in plan])
+    ids = {(l.group_id, l.date): l for l in Lesson.objects.filter(is_demo=True)}
+    marks = [Attendance(lesson=ids[(l.group_id, l.date)], student=x, status=st) for l, ms in plan for x, st in ms]
     Attendance.objects.bulk_create(marks)
 
     # --- imtihonlar (har guruhda 3 ta)
     grades = []
     for g in groups:
-        studs = list(Student.objects.filter(group=g, status="faol"))
+        studs = [x for x in act if x.group_id == g.pk]
         for k, title in enumerate(["Oylik test", "Oraliq nazorat", "Mock imtihon"]):
             dt = today - timedelta(days=50 - k * 21)
             for s in studs:
@@ -268,11 +292,14 @@ def create_demo(seed=2026):
     Grade.objects.bulk_create(grades)
 
     # --- xarajatlar va reklama
-    exps = []
-    for n in range(-5, 1):
+    exps, ads = [], []
+    for n in range(-6, 1):
         m = sv.shift_month(now, n)
         dt = min(today, date.fromisoformat(m + "-05"))
-        exps += [Expense(title="Ofis ijarasi", category="Ijara", amount=4000000, month=m, date=dt, is_demo=True),
+        exps += [Expense(title="Ijara: Chilonzor", category="Ijara", amount=2500000, month=m, date=dt, is_demo=True,
+                         filial=br[0]),
+                 Expense(title="Ijara: Yunusobod", category="Ijara", amount=1500000, month=m, date=dt, is_demo=True,
+                         filial=br[1]),
                  Expense(title="Elektr, gaz, internet", category="Kommunal", amount=rnd.randint(7, 11) * 100000,
                          month=m, date=dt, is_demo=True),
                  Expense(title="Administrator oyligi", category="Maosh", amount=3000000, month=m, date=dt,
@@ -282,6 +309,7 @@ def create_demo(seed=2026):
                 sal = d.group_salary(g, m)
                 if sal:
                     exps.append(Expense(title=f"Oylik: {g.teacher}", category="Maosh", amount=sal, month=m,
+                                        filial_id=g.filial_id,
                                         date=min(today, date.fromisoformat(sv.shift_month(m, 1) + "-03")),
                                         teacher=g.teacher, is_demo=True))
         if n == -4:
@@ -290,8 +318,9 @@ def create_demo(seed=2026):
         for src, lo, hi in (("Instagram", 10, 18), ("Telegram", 3, 8), ("Reklama", 0, 6)):
             v = rnd.randint(lo, hi) * 100000
             if v:
-                AdSpend.objects.create(source=src, amount=v, month=m, note="Target reklama", is_demo=True)
+                ads.append(AdSpend(source=src, amount=v, month=m, note="Target reklama", is_demo=True))
     Expense.objects.bulk_create(exps)
+    AdSpend.objects.bulk_create(ads)
 
     # --- marketing: promokod, skript
     if not Promo.objects.filter(code="DEMO10").exists():
@@ -320,6 +349,8 @@ def delete_demo():
     for m in (Task, Script, Promo, AdSpend, Expense, Grade, Lesson, LeadCall, Payment, Student, Lead, Group):
         m.objects.filter(is_demo=True).delete()
     get_user_model().objects.filter(username__startswith="demo.", is_superuser=False).delete()
+    from crm.models import Branch
+    Branch.objects.filter(is_demo=True).delete()
     from crm.models import Center
     Center.objects.filter(pk=1).update(demo_code="")
 

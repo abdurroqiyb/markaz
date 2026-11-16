@@ -58,6 +58,28 @@ class Center(models.Model):
         return obj
 
 
+class Branch(models.Model):
+    """Filial. Filial biriktirilgan xodim faqat o'z filiali ma'lumotlarini ko'radi; direktor hammasini."""
+    name = models.CharField("Filial nomi", max_length=100, unique=True)
+    address = models.CharField("Manzil", max_length=300, blank=True)
+    phone = models.CharField("Telefon", max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_demo = models.BooleanField(default=False, editable=False)
+
+    class Meta:
+        verbose_name = "Filial"
+        verbose_name_plural = "Filiallar"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+def branch_fk(**kw):
+    return models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+                             verbose_name="Filial", **kw)
+
+
 class Staff(models.Model):
     ROLES = [
         ("direktor", "Direktor"),
@@ -74,6 +96,7 @@ class Staff(models.Model):
     totp_enabled = models.BooleanField("Ikki bosqichli kirish yoqilgan", default=False)
     tg_chat = models.CharField("Telegram chat", max_length=32, blank=True, editable=False)
     tg_code = models.CharField(max_length=16, blank=True, editable=False)
+    filial = branch_fk(help_text="Tanlansa, xodim faqat shu filial ma'lumotlarini ko'radi")
 
     class Meta:
         verbose_name = "Xodim"
@@ -102,7 +125,8 @@ class Group(TimeStamped):
     capacity = models.PositiveIntegerField("Sig'im (o'rin)", default=12)
     teacher_pct = models.PositiveIntegerField("O'qituvchi ulushi (%)", default=40)
     price = models.PositiveIntegerField("Oylik narx (so'm)")
-    branch = models.CharField("Filial", max_length=100, blank=True)
+    branch = models.CharField("Filial (matn)", max_length=100, blank=True, editable=False)
+    filial = branch_fk()
     pay_model = models.CharField("Ustoz oyligi turi", max_length=20, choices=PAY_MODELS, default="percent")
     pay_value = models.PositiveIntegerField("Qat'iy summa yoki dars narxi", default=0)
     start_date = models.DateField("Kurs boshlanishi", null=True, blank=True)
@@ -120,7 +144,11 @@ class Group(TimeStamped):
         if self.teacher_user_id and not self.teacher.strip():
             u = self.teacher_user
             self.teacher = u.get_full_name() or u.username
+        self.branch = self.filial.name if self.filial_id else ""
         super().save(*a, **kw)
+        if self.filial_id:
+            # guruh boshqa filialga o'tsa, talabalari ham o'tadi
+            Student.objects.filter(group=self).exclude(filial_id=self.filial_id).update(filial_id=self.filial_id)
 
 
 # ---------------------------------------------------------------- lidlar
@@ -151,6 +179,7 @@ class Lead(TimeStamped):
     trial_date = models.DateField("Sinov darsi sanasi", null=True, blank=True)
     trial_result = models.CharField("Sinov natijasi", max_length=20, choices=TRIAL_RESULTS, blank=True)
     note = models.TextField("Izoh", blank=True)
+    filial = branch_fk()
 
     class Meta:
         verbose_name = "Lid"
@@ -216,6 +245,7 @@ class Student(TimeStamped):
     lead = models.ForeignKey(Lead, on_delete=models.SET_NULL, null=True, blank=True,
                              related_name="students", verbose_name="Qaysi liddan")
     code = models.CharField("Ota-ona kodi", max_length=8, blank=True, db_index=True, editable=False)
+    filial = branch_fk()
 
     class Meta:
         verbose_name = "Talaba"
@@ -241,6 +271,9 @@ class Student(TimeStamped):
             if kwargs.get("update_fields") is not None:
                 kwargs["update_fields"] = list(kwargs["update_fields"]) + ["code"]
         group_date = getattr(self, "_group_date", None)
+        if self.group_id and kwargs.get("update_fields") is None:
+            self.filial_id = Group.objects.filter(pk=self.group_id).values_list("filial_id", flat=True).first() \
+                or self.filial_id
         super().save(*args, **kwargs)
         if old is None or old_group != self.group_id:
             day = group_date or timezone.localdate()
@@ -261,7 +294,8 @@ class Student(TimeStamped):
                     StatusChange.objects.create(student=self, status="faol", date=min(start, self.paused_at))
                     start = self.paused_at
                 StatusChange.objects.create(student=self, status=old, date=min(start, day))
-            StatusChange.objects.create(student=self, status=self.status, date=day)
+            StatusChange.objects.create(student=self, status=self.status, date=day,
+                                        reason=getattr(self, "_leave_reason", "") or "")
 
 
 def new_student_code():
@@ -289,11 +323,19 @@ class GroupChange(models.Model):
         return f"{self.student} · {self.date} · {self.group or 'guruhsiz'}"
 
 
+LEAVE_REASONS = [
+    ("narx", "Narx qimmat"), ("vaqt", "Vaqt to'g'ri kelmadi"), ("natija", "Natija yoqmadi"),
+    ("ustoz", "O'qituvchi yoqmadi"), ("kochdi", "Ko'chib ketdi / uzoq"), ("tugatdi", "Kursni tugatdi"),
+    ("boshqa_markaz", "Boshqa markazga o'tdi"), ("boshqa", "Boshqa sabab"),
+]
+
+
 class StatusChange(models.Model):
     """Talaba holati tarixi: qaysi sanadan qaysi holatda bo'lgani."""
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="status_log", verbose_name="Talaba")
     status = models.CharField("Holati", max_length=20, choices=Student.STATUSES)
     date = models.DateField("Sanadan")
+    reason = models.CharField("Ketish sababi", max_length=20, choices=LEAVE_REASONS, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -404,6 +446,7 @@ class Expense(TimeStamped):
     month = models.CharField("Qaysi oy uchun", max_length=7, help_text=MONTH_HELP, db_index=True)
     date = models.DateField("Sana", default=timezone.localdate)
     teacher = models.CharField("O'qituvchi (oylik bo'lsa)", max_length=200, blank=True)
+    filial = branch_fk(help_text="Bo'sh: umumiy xarajat (barcha filiallar)")
 
     class Meta:
         verbose_name = "Xarajat"
@@ -420,6 +463,7 @@ class AdSpend(TimeStamped):
     amount = models.PositiveBigIntegerField("Summa (so'm)")
     month = models.CharField("Qaysi oy uchun", max_length=7, help_text=MONTH_HELP, db_index=True)
     note = models.CharField("Izoh", max_length=300, blank=True)
+    filial = branch_fk()
 
     class Meta:
         verbose_name = "Reklama xarajati"
@@ -467,7 +511,8 @@ class Script(TimeStamped):
 # ---------------------------------------------------------------- kassa
 class CashClose(models.Model):
     """Kunlik kassa yopilishi: tizimdagi summa va sanab chiqilgan haqiqiy summa."""
-    date = models.DateField("Sana", unique=True)
+    date = models.DateField("Sana")
+    filial = branch_fk()
     cash_sys = models.BigIntegerField("Naqd (tizim)", default=0)
     card_sys = models.BigIntegerField("Karta (tizim)", default=0)
     transfer_sys = models.BigIntegerField("O'tkazma (tizim)", default=0)
@@ -482,6 +527,7 @@ class CashClose(models.Model):
         verbose_name = "Kassa yopilishi"
         verbose_name_plural = "Kassa yopilishlari"
         ordering = ["-date"]
+        unique_together = [("date", "filial")]
 
     def __str__(self):
         return f"Kassa {self.date}"

@@ -26,11 +26,15 @@ def reminders(user):
         out.append({"text": f"{label} vazifa: {x.title}",
                     "url": reverse("vazifalar"), "cls": "bad" if late else "warn"})
     if allowed(user, "lidlar"):
-        due = Lead.objects.filter(next_contact__lte=t).exclude(status__in=("yozildi", "rad")).count()
+        leads = Lead.objects.exclude(status__in=("yozildi", "rad"))
+        b = getattr(user, "active_branch_id", None) or getattr(getattr(user, "staff", None), "filial_id", None)
+        if b:
+            leads = leads.filter(Q(filial_id=b) | Q(filial=None))
+        due = leads.filter(next_contact__lte=t).count()
         if due:
             out.append({"text": f"{due} ta lidga bugun qo'ng'iroq qilish kerak", "url": reverse("bugun"),
                         "cls": "warn"})
-        trials = Lead.objects.filter(trial_date=t).exclude(status__in=("yozildi", "rad")).count()
+        trials = leads.filter(trial_date=t).count()
         if trials:
             out.append({"text": f"Bugun {trials} ta sinov darsi", "url": reverse("bugun"), "cls": "info"})
     if allowed(user, "talabalar") and not is_teacher_scoped(user):

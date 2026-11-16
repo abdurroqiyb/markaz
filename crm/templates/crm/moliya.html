@@ -1,0 +1,37 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Moliya tahlili{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Moliya tahlili</h1><p class="sub">12 oy: foyda, guruhlar, talabalar ketishi va qarzlar{% if branch_active %} · {{ branch_active.name }}{% endif %}</p></div><div class="tools">{% include "crm/_monthnav.html" %}<a class="btn" href="{% url 'hisobotlar' %}?m={{ m }}">Oylik hisobot</a></div></div>
+<div class="tiles">
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "wallet" %}</span>12 oy tushum</div><div class="num">{{ tot_i|som }}<small>so'm</small></div><div class="hint">Xarajat: {{ tot_e|som }}</div></div>
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "trend" %}</span>12 oy sof foyda</div><div class="num {% if tot_net >= 0 %}good-t{% else %}bad-t{% endif %}">{{ tot_net|som }}<small>so'm</small></div><div class="hint">{% if tot_margin is not None %}Marja {{ tot_margin }}%{% endif %}</div></div>
+  <div class="tile"><div class="lbl"><span class="ico">{% icon "cap" %}</span>Bir talabadan (ARPU)</div><div class="num">{{ arpu|som }}<small>so'm/oy</small></div><div class="hint">{% if ltv %}Umrbod qiymat ≈ {{ ltv|som }} so'm{% else %}Oxirgi 3 oy o'rtachasi{% endif %}</div></div>
+  <div class="tile"><div class="lbl"><span class="ico bad">{% icon "alert" %}</span>Oylik ketish</div><div class="num">{{ avg_churn }}<small>%</small></div><div class="hint">{% if life %}O'rtacha {{ life }} oy o'qiydi{% else %}6 oyda ketgan yo'q{% endif %}</div></div>
+</div>
+<section class="panel"><h2>Tushum, xarajat va foyda</h2><div data-src="rows-data" data-chart='{"type":"columns","aria":"12 oylik tushum, xarajat va foyda","series":[{"key":"i","label":"Tushum","color":"var(--accent)"},{"key":"e","label":"Xarajat","color":"var(--bar2)"},{"key":"net","label":"Sof foyda","color":"var(--good)","type":"line"}]}'></div>{{ rows|json_script:"rows-data" }}</section>
+<div class="cols">
+  <section class="panel"><h2>Talabalar soni va ketish</h2><div data-src="rows-data" data-chart='{"type":"columns","h":220,"aria":"Faol, yangi va ketgan talabalar","series":[{"key":"new","label":"Yangi","color":"var(--good)"},{"key":"left","label":"Ketgan","color":"var(--bad)"},{"key":"act","label":"Faol","color":"var(--accent)","type":"line"}]}'></div></section>
+  <section class="panel"><h2>Nega ketishdi <small class="mut">12 oy, {{ left_total }} ta</small></h2>{% if reason_bars %}<div data-src="why-data" data-chart='{"type":"hbars","label":"Talaba","color":"var(--bad)","unit":"ta"}'></div>{{ reason_bars|json_script:"why-data" }}<p class="mut m0" style="font-size:13px">Talabani "Tark etgan" qilganda sababini tanlang: shu yerda yig'iladi.</p>{% else %}<p class="mut m0">12 oyda ketgan talaba yo'q.</p>{% endif %}</section>
+</div>
+<section class="panel"><h2>Oylar bo'yicha</h2><div class="tblwrap"><table class="tbl sortable"><thead><tr><th>Oy</th><th class="r">Tushum</th><th class="r">Yig'ilish</th><th class="r">Xarajat</th><th class="r">Foyda</th><th class="r">Marja</th><th class="r">Faol</th><th class="r">Yangi</th><th class="r">Ketdi</th><th class="r">Ketish</th><th class="r">ARPU</th></tr></thead><tbody>
+{% for r in rows reversed %}<tr><td data-v="{{ r.k }}">{{ r.label }}</td><td class="r" data-v="{{ r.i }}">{{ r.i|som }}</td><td class="r">{% if r.collect is not None %}{{ r.collect }}%{% else %}-{% endif %}</td><td class="r" data-v="{{ r.e }}">{{ r.e|som }}</td><td class="r {% if r.net >= 0 %}good-t{% else %}bad-t{% endif %}" data-v="{{ r.net }}" style="font-weight:700">{{ r.net|som }}</td><td class="r">{% if r.margin is not None %}{{ r.margin }}%{% else %}-{% endif %}</td><td class="r">{{ r.act }}</td><td class="r">{{ r.new }}</td><td class="r">{{ r.left }}</td><td class="r">{{ r.churn }}%</td><td class="r" data-v="{{ r.arpu }}">{{ r.arpu|som }}</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% if br_rows %}<section class="panel"><h2>Filiallar <small class="mut">{{ m_label }}</small></h2><div class="tblwrap"><table class="tbl"><thead><tr><th>Filial</th><th class="r">Faol talaba</th><th class="r">Tushum</th><th class="r">Xarajat</th><th class="r">Foyda</th></tr></thead><tbody>
+{% for b in br_rows %}<tr><td>{{ b.name }}</td><td class="r">{{ b.n }}</td><td class="r">{{ b.inc|som }}</td><td class="r">{{ b.exp|som }}</td><td class="r {% if b.net >= 0 %}good-t{% else %}bad-t{% endif %}" style="font-weight:700">{{ b.net|som }}</td></tr>{% endfor %}
+</tbody></table></div><p class="mut m0" style="font-size:13px">Umumiy (filialsiz) xarajatlar, masalan direktor oyligi, alohida qatorda.</p></section>{% endif %}
+<div class="cols">
+  <section class="panel"><h2>Guruhlar foydasi <small class="mut">12 oy, ustoz oyligidan keyin</small></h2>{% if grp_bars %}<div data-src="g-data" data-chart='{"type":"hbars","label":"Foyda","color":"var(--good)"}'></div>{{ grp_bars|json_script:"g-data" }}{% else %}<p class="mut m0">Ma'lumot yo'q.</p>{% endif %}</section>
+  <section class="panel"><h2>Qarzlar yoshi</h2>
+    <div class="mini"><span>Faqat joriy oy<br><small class="mut">{{ aging.1.0 }} ta talaba</small></span><span class="money warn-t">{{ aging.1.1|som }}</span></div>
+    <div class="mini"><span>2 oylik<br><small class="mut">{{ aging.2.0 }} ta talaba</small></span><span class="money bad-t">{{ aging.2.1|som }}</span></div>
+    <div class="mini"><span>3 oy va undan ko'p<br><small class="mut">{{ aging.3.0 }} ta talaba: undirish qiyinlashadi</small></span><span class="money bad-t">{{ aging.3.1|som }}</span></div>
+    <div class="mini"><span><b>Jami qarz</b></span><b class="money">{{ debt_total|som }}</b></div>
+    {% if meth %}<h3>To'lov turlari <small class="mut">{{ m_label }}</small></h3><div data-src="m-data" data-chart='{"type":"hbars","label":"Summa","color":"var(--accent)"}'></div>{{ meth|json_script:"m-data" }}{% endif %}
+  </section>
+</div>
+<section class="panel"><h2>Guruhlar <small class="mut">{{ m_label }}</small></h2><div class="tblwrap"><table class="tbl sortable"><thead><tr><th>Guruh</th><th class="r">Talaba</th><th class="r">To'lganlik</th><th class="r">Tushum</th><th class="r">Ustoz</th><th class="r">Qoladi</th><th class="r">12 oy foyda</th></tr></thead><tbody>
+{% for r in grp %}<tr><td>{{ r.g.name }}<br><small class="mut">{{ r.g.teacher|default:"" }}</small></td><td class="r">{{ r.n }}</td><td class="r" data-v="{{ r.fill|default:0 }}">{% if r.fill is not None %}{{ r.fill }}%{% else %}-{% endif %}</td><td class="r" data-v="{{ r.im }}">{{ r.im|som }}</td><td class="r" data-v="{{ r.sm }}">{{ r.sm|som }}</td><td class="r {% if r.rm >= 0 %}good-t{% else %}bad-t{% endif %}" data-v="{{ r.rm }}">{{ r.rm|som }}</td><td class="r" data-v="{{ r.r12 }}" style="font-weight:700">{{ r.r12|som }}</td></tr>{% empty %}<tr><td colspan="7" class="mut">Guruh yo'q.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% if left_now %}<section class="panel"><h2>{{ m_label }}da ketganlar</h2>{% for x in left_now %}<div class="mini"><span><a href="{% url 'student_profile' x.s.pk %}">{{ x.s.name }}</a><br><small class="mut">{{ x.g.name|default:"" }}</small></span><span class="pill mute">{{ x.why|default:"sabab yo'q" }}</span></div>{% endfor %}</section>{% endif %}
+{% endblock %}

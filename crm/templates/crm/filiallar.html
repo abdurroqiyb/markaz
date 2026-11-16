@@ -1,0 +1,27 @@
+{% extends "crm/base.html" %}
+{% block title %}Filiallar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Filiallar</h1><p class="sub">Har bir filialning o'z guruhlari, talabalari, kassasi va xodimlari</p></div></div>
+<div class="cols">
+  <section class="panel"><h2>{% if obj %}Filialni tahrirlash{% else %}Filial qo'shish{% endif %}</h2>
+    <form method="post" novalidate class="stack">{% csrf_token %}
+      {% for row in form.layout %}<div class="frow">{% for f in row %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endfor %}</div>{% endfor %}
+      <div class="fbtns">{% if obj %}<a class="btn" href="{% url 'filiallar' %}">Bekor qilish</a>{% endif %}<button class="btn primary">Saqlash</button></div>
+    </form></section>
+  <section class="panel"><h2>Qanday ishlaydi</h2>
+    <ol class="steps">
+      <li>Filiallarni qo'shing.</li>
+      <li>Guruhlar bo'limida har bir guruhga filialini tanlang: talabalari ham o'sha filialga o'tadi.</li>
+      <li>Xodimlar bo'limida xodimga filial biriktiring: u faqat o'z filiali ma'lumotlarini ko'radi.</li>
+      <li>Siz (direktor) chap paneldagi tanlovdan "Barcha filiallar" yoki bitta filialni tanlaysiz.</li>
+    </ol>
+    {% if free_groups %}<div class="banner warning">{{ free_groups }} ta guruhga filial tanlanmagan. Ular faqat "Barcha filiallar" ko'rinishida chiqadi.</div>{% endif %}
+  </section>
+</div>
+<section class="panel"><h2>Filiallar ro'yxati</h2>
+  {% for r in rows %}<div class="mini"><span><b>{{ r.b.name }}</b><br><small class="mut">{{ r.groups }} guruh · {{ r.students }} faol talaba{% if r.b.address %} · {{ r.b.address }}{% endif %}</small>
+    {% if r.staff %}<br><small class="mut">Xodimlar: {% for st in r.staff %}{{ st.user.get_full_name|default:st.user.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</small>{% endif %}</span>
+    <span class="rowact"><a class="btn sm" href="{% url 'filial_edit' r.b.pk %}">Tahrirlash</a>{% url 'filial_delete' r.b.pk as du %}{% include "crm/_del.html" with del_url=du %}</span></div>
+  {% empty %}<p class="mut m0">Hozircha filial yo'q: hamma narsa bitta markaz sifatida ishlaydi.</p>{% endfor %}
+</section>
+{% endblock %}

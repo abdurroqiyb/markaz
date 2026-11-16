@@ -8,6 +8,7 @@
   <form method="post" novalidate class="stack" id="staffform">{% csrf_token %}
     <div class="frow">{% for f in form %}{% if f.name == "first_name" or f.name == "last_name" %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% endif %}</div>{% endif %}{% endfor %}</div>
     <div class="frow"><div class="field"><label for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>{{ form.phone }}</div><div class="field"><label for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>{{ form.role }}</div></div>
+    {% if form.filial %}<div class="frow"><div class="field"><label for="{{ form.filial.id_for_label }}">{{ form.filial.label }}</label>{{ form.filial }}</div></div>{% endif %}
     <label class="chkline">{{ form.custom }} <span>{{ form.custom.label }}</span></label>
     <fieldset class="secgrid{% if form.sections.errors %} has-err{% endif %}" id="secgrid"><legend>{{ form.sections.label }}</legend>
       {% for c in form.sections %}<label class="secopt">{{ c.tag }}<span>{{ c.choice_label }}</span></label>{% endfor %}
