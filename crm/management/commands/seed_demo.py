@@ -22,6 +22,7 @@ from crm.models import (AdSpend, Center, Attendance, Expense, Grade, Group, Grou
 DEMO_USERS = [  # login, ism, familiya, rol
     ("demo.admin", "Gulnora", "Saidova", "administrator"),
     ("demo.marketolog", "Jasur", "Qodirov", "marketolog"),
+    ("demo.yunusobod", "Kamola", "Ahmedova", "administrator"),  # faqat Yunusobod filialini ko'radi
     ("demo.dilnoza", "Dilnoza", "Karimova", "oqituvchi"),
     ("demo.sardor", "Sardor", "Aliyev", "oqituvchi"),
     ("demo.malika", "Malika", "Tursunova", "oqituvchi"),
@@ -92,7 +93,12 @@ def create_demo(seed=2026):
     Staff.objects.filter(user__in=users.values()).delete()
     Staff.objects.bulk_create([Staff(user=users[l], role=r, phone=_phone(rnd)) for l, _, _, r in DEMO_USERS])
 
-    # --- guruhlar
+    # --- filiallar (2 ta) va guruhlar
+    from crm.models import Branch
+    br = []
+    for nm, addr in (("Chilonzor (namuna)", "Chilonzor, 9-kvartal"), ("Yunusobod (namuna)", "Yunusobod, 4-mavze")):
+        br.append(Branch.objects.get_or_create(name=nm, defaults={"address": addr, "is_demo": True})[0])
+    Staff.objects.filter(user=users["demo.yunusobod"]).update(filial=br[1])
     start = date.fromisoformat(sv.shift_month(now, -6) + "-01")
     groups = []
     for i, (name, course, t, days, time, room, price, cap, pm, pv) in enumerate(GROUPS):
@@ -100,7 +106,8 @@ def create_demo(seed=2026):
         groups.append(Group(name=name, course=course, teacher=u.get_full_name(), teacher_user=u, days=days,
                             time=time, room=room, price=price, capacity=cap, pay_model=pm, pay_value=pv,
                             teacher_pct=35, start_date=start + timedelta(days=7 * (i % 3)),
-                            end_date=today + timedelta(days=10) if i == 6 else None, branch="", is_demo=True))
+                            end_date=today + timedelta(days=10) if i == 6 else None, is_demo=True,
+                            filial=br[0] if i % 3 != 2 else br[1], branch=(br[0] if i % 3 != 2 else br[1]).name))
     Group.objects.bulk_create(groups)
     groups = list(Group.objects.filter(is_demo=True).order_by("id"))
 
@@ -154,6 +161,7 @@ def create_demo(seed=2026):
         st = rnd.choices(["faol", "muzlatilgan", "tark", "navbat"], [60, 4, 7, 4])[0]
         s = Student(name=_name(rnd, rnd.random() < .5), phone=_phone(rnd), parent=_phone(rnd), group=g,
                     join_date=join, status=st, discount=rnd.choice([0] * 8 + [30000, 50000]), is_demo=True,
+                    filial_id=g.filial_id,
                     code=new_code(),
                     birth_date=date(today.year - rnd.randint(10, 22), rnd.randint(1, 12), rnd.randint(1, 28)),
                     lead=won.pop() if won and rnd.random() < .7 else None)
@@ -175,7 +183,9 @@ def create_demo(seed=2026):
     mover.group = new_g
     Student.objects.bulk_create(students)
     students = list(Student.objects.filter(is_demo=True).order_by("id"))
-    StatusChange.objects.bulk_create([StatusChange(student=s, status=st, date=dt)
+    why = ["narx", "vaqt", "vaqt", "kochdi", "natija", "ustoz", "tugatdi", "boshqa_markaz", "narx"]
+    StatusChange.objects.bulk_create([StatusChange(student=s, status=st, date=dt,
+                                                   reason=rnd.choice(why) if st == "tark" else "")
                                       for s, steps in zip(students, hist) for dt, st in steps])
     gch = [GroupChange(student=s, group_id=s.group_id, date=s.join_date) for s in students if s.pk != students[mi].pk]
     gch += [GroupChange(student=students[mi], group=old_g, date=students[mi].join_date),
@@ -283,10 +293,13 @@ def create_demo(seed=2026):
 
     # --- xarajatlar va reklama
     exps, ads = [], []
-    for n in range(-5, 1):
+    for n in range(-6, 1):
         m = sv.shift_month(now, n)
         dt = min(today, date.fromisoformat(m + "-05"))
-        exps += [Expense(title="Ofis ijarasi", category="Ijara", amount=4000000, month=m, date=dt, is_demo=True),
+        exps += [Expense(title="Ijara: Chilonzor", category="Ijara", amount=2500000, month=m, date=dt, is_demo=True,
+                         filial=br[0]),
+                 Expense(title="Ijara: Yunusobod", category="Ijara", amount=1500000, month=m, date=dt, is_demo=True,
+                         filial=br[1]),
                  Expense(title="Elektr, gaz, internet", category="Kommunal", amount=rnd.randint(7, 11) * 100000,
                          month=m, date=dt, is_demo=True),
                  Expense(title="Administrator oyligi", category="Maosh", amount=3000000, month=m, date=dt,
@@ -296,6 +309,7 @@ def create_demo(seed=2026):
                 sal = d.group_salary(g, m)
                 if sal:
                     exps.append(Expense(title=f"Oylik: {g.teacher}", category="Maosh", amount=sal, month=m,
+                                        filial_id=g.filial_id,
                                         date=min(today, date.fromisoformat(sv.shift_month(m, 1) + "-03")),
                                         teacher=g.teacher, is_demo=True))
         if n == -4:
@@ -335,6 +349,8 @@ def delete_demo():
     for m in (Task, Script, Promo, AdSpend, Expense, Grade, Lesson, LeadCall, Payment, Student, Lead, Group):
         m.objects.filter(is_demo=True).delete()
     get_user_model().objects.filter(username__startswith="demo.", is_superuser=False).delete()
+    from crm.models import Branch
+    Branch.objects.filter(is_demo=True).delete()
     from crm.models import Center
     Center.objects.filter(pk=1).update(demo_code="")
 

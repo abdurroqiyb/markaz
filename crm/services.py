@@ -72,6 +72,14 @@ def prorate(full, g, join):
     return int(round(full * left / total / 1000) * 1000)
 
 
+def day_closed(day, student=None):
+    """Shu kun kassasi yopilganmi: umumiy kassa yoki talaba filialining kassasi."""
+    from .models import CashClose
+    fid = getattr(student, "filial_id", None)
+    qs = CashClose.objects.filter(date=day)
+    return qs.filter(filial=None).exists() or bool(fid and qs.filter(filial_id=fid).exists())
+
+
 def valid_month(k, default=None):
     return k if k and MONTH_RE.match(k) else (default or now_month())
 
@@ -196,11 +204,16 @@ class Data:
         self.TODAY = today()
         self.user = user
         self.scope = my_group_ids(user)
+        self.branch = getattr(user, "active_branch_id", None) if user is not None else None
 
     # --- yuklash
+    def _br(self, rows):
+        """Tanlangan filial bo'yicha filtr (filial bo'lmasa hammasi)."""
+        return rows if not self.branch else [x for x in rows if x.filial_id == self.branch]
+
     @cached_property
     def groups(self):
-        gs = list(Group.objects.all())
+        gs = self._br(list(Group.objects.all()))
         return gs if self.scope is None else [g for g in gs if g.id in self.scope]
 
     @cached_property
@@ -209,7 +222,7 @@ class Data:
 
     @cached_property
     def students(self):
-        ss = list(Student.objects.all())
+        ss = self._br(list(Student.objects.all()))
         return ss if self.scope is None else [x for x in ss if x.group_id in self.scope]
 
     @cached_property
@@ -218,23 +231,24 @@ class Data:
 
     @cached_property
     def leads(self):
-        return list(Lead.objects.all())
+        ls = list(Lead.objects.all())
+        return ls if not self.branch else [x for x in ls if x.filial_id in (self.branch, None)]
 
     @cached_property
     def payments(self):
         ps = list(Payment.objects.all())
-        if self.scope is None:
+        if self.scope is None and not self.branch:
             return ps
         ids = set(self.student_map)
         return [p for p in ps if p.student_id in ids]
 
     @cached_property
     def expenses(self):
-        return list(Expense.objects.all())
+        return self._br(list(Expense.objects.all()))
 
     @cached_property
     def ads(self):
-        return list(AdSpend.objects.all())
+        return self._br(list(AdSpend.objects.all()))
 
     @cached_property
     def charges(self):

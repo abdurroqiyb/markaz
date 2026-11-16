@@ -19,8 +19,10 @@
 {% if user.is_authenticated %}
 <aside class="side">
   <div class="brand"><span class="mark">M</span><div>Markaz CRM<small>{{ center.name|default:"O'quv markaz boshqaruvi" }}</small></div></div>
+  {% if branches_all %}{% if branch_switch %}<form method="post" action="{% url 'filial_switch' %}" class="brsw">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><select name="filial" aria-label="Filial" onchange="this.form.submit()"><option value="">Barcha filiallar</option>{% for b in branches_all %}<option value="{{ b.pk }}"{% if branch_active.pk == b.pk %} selected{% endif %}>{{ b.name }}</option>{% endfor %}</select><noscript><button class="btn sm">OK</button></noscript></form>{% elif branch_active %}<div class="brsw"><span>{{ branch_active.name }}</span></div>{% endif %}{% endif %}
+  <button type="button" class="kbtn" id="kopen" aria-label="Tezkor qidiruv">{% icon "search" %}<span>Qidirish...</span><kbd>Ctrl K</kbd></button>
   <nav class="nav" aria-label="Bo'limlar">
-    {% for n in nav %}<a href="{% url n.key %}"{% if section == n.key %} aria-current="page"{% endif %}>{% icon n.icon %}<span>{{ n.label }}</span></a>{% endfor %}
+    {% for n in nav %}{% ifchanged n.group %}{% if n.group %}<div class="navgrp">{{ n.group }}</div>{% endif %}{% endifchanged %}<a href="{% url n.key %}"{% if section == n.key %} aria-current="page"{% endif %}>{% icon n.icon %}<span>{{ n.label }}</span></a>{% endfor %}
   </nav>
   <div class="me">
     <span>{{ user.get_full_name|default:user.username }}<small>{{ my_role_label }}</small></span>
@@ -37,6 +39,12 @@
   {% block content %}{% endblock %}
 </main>
 <div id="toast" hidden role="status"></div>
+{% if user.is_authenticated %}<div class="kpal" id="kpal" hidden role="dialog" aria-modal="true" aria-label="Tezkor qidiruv">
+  <div class="kbox"><div class="kin">{% icon "search" %}<input id="kq" type="search" placeholder="Talaba, lid, guruh yoki bo'lim... (telefon raqami ham bo'ladi)" autocomplete="off" aria-controls="klist"><kbd>Esc</kbd></div>
+  <ul class="klist" id="klist" role="listbox"></ul>
+  <div class="kfoot"><span><kbd>↑</kbd><kbd>↓</kbd> tanlash</span><span><kbd>Enter</kbd> ochish</span><span><kbd>Ctrl K</kbd> istalgan sahifada</span></div></div>
+</div>
+<script id="knav" type="application/json">{"api":"{% url 'palette' %}","nav":[{% for n in nav %}{"t":"{{ n.label|escapejs }}","url":"{% url n.key %}"}{% if not forloop.last %},{% endif %}{% endfor %}],"act":[{% if can_money %}{"t":"To'lov qabul qilish","url":"{% url 'payment_add' %}"},{"t":"Kassa","url":"{% url 'kassa' %}"},{% endif %}{% if can_edit_students %}{"t":"Yangi talaba","url":"{% url 'student_add' %}"},{% endif %}{"t":"Yangi lid","url":"{% url 'lead_add' %}"},{"t":"Yangi vazifa","url":"{% url 'task_add' %}"},{"t":"Bildirishnomalar","url":"{% url 'bildirishnomalar' %}"}]}</script>{% endif %}
 <script src="{% static 'crm/js/charts.js' %}"></script>
 <script src="{% static 'crm/js/app.js' %}"></script>
 {% block scripts %}{% endblock %}

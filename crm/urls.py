@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.urls import path
 
-from . import cash, exams, notify
+from . import branches, cash, exams, finance, notify, palette
 from . import telegram as tg
 from . import views as v
 
@@ -89,6 +89,12 @@ urlpatterns = [
     path("jurnal/", v.jurnal, name="jurnal"),
     path("qidiruv/", v.qidiruv, name="qidiruv"),
     path("kassa/", cash.kassa, name="kassa"),
+    path("filiallar/", branches.filiallar, name="filiallar"),
+    path("filiallar/<int:pk>/", branches.filiallar, name="filial_edit"),
+    path("filiallar/<int:pk>/ochirish/", branches.filial_delete, name="filial_delete"),
+    path("filial/tanlash/", branches.switch, name="filial_switch"),
+    path("moliya/", finance.moliya, name="moliya"),
+    path("api/palette/", palette.palette, name="palette"),
     path("kassa/<int:pk>/ochish/", cash.kassa_reopen, name="kassa_reopen"),
     path("bildirishnomalar/", notify.bildirishnomalar, name="bildirishnomalar"),
     path("bildirishnomalar/tozalash/", notify.clear, name="notify_clear"),

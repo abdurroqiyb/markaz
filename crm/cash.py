@@ -31,9 +31,12 @@ class CloseForm(StyledMixin, forms.Form):
         return [[self["cash_real"], self["card_real"]], [self["note"]]]
 
 
-def totals(day):
+def totals(day, branch=None):
     t = {"Naqd": 0, "Karta": 0, "O'tkazma": 0}
-    rows = list(Payment.objects.filter(date=day).select_related("student").order_by("-created_at"))
+    qs = Payment.objects.filter(date=day)
+    if branch:
+        qs = qs.filter(student__filial_id=branch)
+    rows = list(qs.select_related("student").order_by("-created_at"))
     for p in rows:
         t[p.method] = t.get(p.method, 0) + p.amount
     return t, rows
@@ -45,12 +48,14 @@ def kassa(request):
         day = date.fromisoformat(request.GET.get("d") or request.POST.get("d") or "")
     except ValueError:
         day = sv.today()
-    t, rows = totals(day)
-    closed = CashClose.objects.filter(date=day).first()
+    from .branches import active
+    br = active(request)
+    t, rows = totals(day, br)
+    closed = CashClose.objects.filter(date=day, filial_id=br).first()
     form = CloseForm(request.POST or None, initial={"cash_real": t["Naqd"], "card_real": t["Karta"]})
     if request.method == "POST" and not closed and form.is_valid():
         cd = form.cleaned_data
-        c = CashClose.objects.create(date=day, cash_sys=t["Naqd"], card_sys=t["Karta"], transfer_sys=t["O'tkazma"],
+        c = CashClose.objects.create(date=day, filial_id=br, cash_sys=t["Naqd"], card_sys=t["Karta"], transfer_sys=t["O'tkazma"],
                                      cash_real=cd["cash_real"], card_real=cd["card_real"], note=cd["note"],
                                      user=request.user)
         from .views import log
@@ -64,7 +69,7 @@ def kassa(request):
         else:
             messages.success(request, "Kassa yopildi, farq yo'q")
         return redirect(f"{reverse('kassa')}?d={day}")
-    history = list(CashClose.objects.select_related("user")[:30])
+    history = list(CashClose.objects.filter(filial_id=br).select_related("user")[:30])
     return render(request, "crm/kassa.html", {
         "section": "tolovlar", "day": day, "t": t, "total": sum(t.values()), "rows": rows, "closed": closed,
         "form": form, "history": history, "prev": day - timedelta(days=1), "next": day + timedelta(days=1),

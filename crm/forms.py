@@ -33,7 +33,9 @@ class StyledMixin:
 class StyledModelForm(StyledMixin, forms.ModelForm):
     rows = []  # bir qatorga joylanadigan maydonlar guruhlari
 
-    def __init__(self, *a, **kw):
+    def __init__(self, *a, branch=None, lock_branch=False, **kw):
+        self.branch_id = branch
+        self.lock_branch = lock_branch
         super().__init__(*a, **kw)
         self._style()
 
@@ -64,8 +66,12 @@ class LeadForm(StyledModelForm):
     class Meta:
         model = Lead
         fields = ["name", "phone", "course", "source", "status", "next_contact", "trial_date",
-                  "trial_result", "note"]
+                  "trial_result", "note", "filial"]
         widgets = date_widgets("next_contact", "trial_date")
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        branch_field(self)
 
 
 class LeadCallForm(StyledModelForm):
@@ -79,7 +85,9 @@ class LeadCallForm(StyledModelForm):
 
 
 class StudentForm(StyledModelForm):
-    rows = [["phone", "parent"], ["join_date", "status"], ["discount", "promo"], ["birth_date", "return_date"]]
+    rows = [["phone", "parent"], ["join_date", "status"], ["leave_reason"], ["discount", "promo"],
+            ["birth_date", "return_date"]]
+    leave_reason = forms.ChoiceField(label="Ketish sababi (tark etsa)", required=False)
 
     class Meta:
         model = Student
@@ -96,16 +104,31 @@ class StudentForm(StyledModelForm):
         if self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
         self.fields["referrer"].queryset = qs
+        from .models import LEAVE_REASONS
+        self.fields["leave_reason"].choices = [("", "Tanlang")] + LEAVE_REASONS
+        if self.branch_id:
+            self.fields["group"].queryset = Group.objects.filter(filial_id=self.branch_id)
+
+    def clean(self):
+        cd = super().clean()
+        was = self.instance.status if self.instance.pk else None
+        if cd.get("status") == "tark" and was != "tark" and not cd.get("leave_reason"):
+            self.add_error("leave_reason", "Nega ketganini belgilang: bu hisobotda kerak")
+        return cd
+
+    def save(self, commit=True):
+        self.instance._leave_reason = self.cleaned_data.get("leave_reason", "")
+        return super().save(commit)
 
 
 class GroupForm(StyledModelForm):
-    rows = [["course", "branch"], ["teacher_user", "teacher"], ["days", "time"], ["room", "capacity", "teacher_pct"],
+    rows = [["course", "filial"], ["teacher_user", "teacher"], ["days", "time"], ["room", "capacity", "teacher_pct"],
             ["price"], ["pay_model", "pay_value"], ["start_date", "end_date"]]
     placeholders = {"name": "Ingliz tili A2 · kechki", "days": "Du-Chor-Ju", "time": "18:00-19:30"}
 
     class Meta:
         model = Group
-        fields = ["name", "course", "branch", "teacher_user", "teacher", "days", "time", "room", "capacity",
+        fields = ["name", "course", "filial", "teacher_user", "teacher", "days", "time", "room", "capacity",
                   "teacher_pct", "price", "pay_model", "pay_value", "start_date", "end_date"]
         widgets = date_widgets("start_date", "end_date")
 
@@ -116,6 +139,7 @@ class GroupForm(StyledModelForm):
         f.label_from_instance = lambda u: u.get_full_name() or u.username
         f.empty_label = "Tanlanmagan"
         self.fields["teacher"].help_text = "Hisob tanlansa, bo'sh qoldirsangiz ismi o'zi yoziladi"
+        branch_field(self)
 
 
 class MonthField(forms.ChoiceField):
@@ -138,7 +162,10 @@ class PaymentForm(StyledModelForm):
     def __init__(self, *a, month=None, **kw):
         super().__init__(*a, **kw)
         # Faol talabalar va qarzi qolgan (muzlatilgan / tark etgan) talabalar ham to'lov qila oladi.
-        self.fields["student"].queryset = Student.objects.exclude(status="navbat").select_related("group") \
+        qs = Student.objects.exclude(status="navbat")
+        if self.branch_id:
+            qs = qs.filter(filial_id=self.branch_id)
+        self.fields["student"].queryset = qs.select_related("group") \
             .order_by(Case(When(status="faol", then=0), default=1), "name")
         self.fields["student"].empty_label = None
         st = dict(Student.STATUSES)
@@ -150,8 +177,7 @@ class PaymentForm(StyledModelForm):
 
     def clean_date(self):
         d = self.cleaned_data["date"]
-        from .models import CashClose
-        if d and CashClose.objects.filter(date=d).exists():
+        if d and sv.day_closed(d, self.cleaned_data.get("student")):
             raise forms.ValidationError("Bu kun kassasi yopilgan. Boshqa sana tanlang yoki direktor kassani qayta ochsin.")
         return d
 
@@ -188,12 +214,13 @@ class ExpenseForm(StyledModelForm):
 
     class Meta:
         model = Expense
-        fields = ["title", "category", "amount", "month", "date", "teacher"]
+        fields = ["title", "category", "amount", "month", "date", "teacher", "filial"]
         widgets = date_widgets("date")
 
     def __init__(self, *a, month=None, **kw):
         super().__init__(*a, **kw)
         self.fields["month"].choices = sv.month_options(month or self.initial.get("month"))
+        branch_field(self)
 
 
 class CenterForm(StyledModelForm):
@@ -250,11 +277,12 @@ class AdForm(StyledModelForm):
 
     class Meta:
         model = AdSpend
-        fields = ["source", "amount", "month", "note"]
+        fields = ["source", "amount", "month", "note", "filial"]
 
     def __init__(self, *a, month=None, **kw):
         super().__init__(*a, **kw)
         self.fields["month"].choices = sv.month_options(month or self.initial.get("month"))
+        branch_field(self)
 
 
 class PromoForm(StyledModelForm):
@@ -322,6 +350,8 @@ class StaffCreateForm(StyledMixin, forms.Form):
     username = forms.CharField(label="Login (bo'sh qoldirsangiz ismdan yasaladi)", max_length=150, required=False)
     password = forms.CharField(label="Kod / parol (bo'sh qoldirsangiz avtomatik)", required=False,
                                widget=forms.TextInput(attrs={"autocomplete": "new-password"}))
+    filial = forms.ModelChoiceField(label="Filial", required=False, queryset=None,
+                                    empty_label="Barcha filiallar")
     groups = forms.ModelMultipleChoiceField(label="Guruhlari (o'qituvchi uchun)", required=False,
                                             queryset=Group.objects.none(), widget=forms.CheckboxSelectMultiple)
 
@@ -329,6 +359,7 @@ class StaffCreateForm(StyledMixin, forms.Form):
         super().__init__(*a, **kw)
         self.fields["groups"].queryset = Group.objects.order_by("name")
         self.fields["groups"].label_from_instance = lambda g: g.name + (f" ({g.teacher})" if g.teacher else "")
+        _filial_choice(self)
         self._style()
 
     def clean_username(self):
@@ -355,9 +386,19 @@ class StaffCreateForm(StyledMixin, forms.Form):
     def layout(self):
         rows = [[self["first_name"], self["last_name"]], [self["phone"], self["role"]],
                 [self["username"], self["password"]]]
+        if "filial" in self.fields:
+            rows.append([self["filial"]])
         if self.fields["groups"].queryset.exists():
             rows.append([self["groups"]])
         return rows
+
+
+def _filial_choice(form):
+    from .models import Branch
+    if Branch.objects.exists():
+        form.fields["filial"].queryset = Branch.objects.all()
+    else:
+        del form.fields["filial"]
 
 
 class StaffEditForm(StyledMixin, forms.Form):
@@ -365,6 +406,8 @@ class StaffEditForm(StyledMixin, forms.Form):
     last_name = forms.CharField(label="Familiya", max_length=150, required=False)
     phone = forms.CharField(label="Telefon", max_length=50, required=False)
     role = forms.ChoiceField(label="Rol", choices=[c for c in Staff.ROLES])
+    filial = forms.ModelChoiceField(label="Filial (tanlansa faqat shu filialni ko'radi)", required=False,
+                                    queryset=None, empty_label="Barcha filiallar")
     custom = forms.BooleanField(label="Bo'limlarni o'zim belgilayman (rol standartidan farqli)", required=False)
     sections = forms.MultipleChoiceField(label="Ochiq bo'limlar", required=False,
                                          widget=forms.CheckboxSelectMultiple,
@@ -372,6 +415,7 @@ class StaffEditForm(StyledMixin, forms.Form):
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
+        _filial_choice(self)
         self._style()
 
     def clean(self):
@@ -440,3 +484,26 @@ class TransferForm(StyledMixin, forms.Form):
 
     def layout(self):
         return [[self["group"], self["date"]], [self["keep_discount"]]]
+
+
+def branch_field(form, name="filial"):
+    """Filial tanlash: filial yo'q bo'lsa maydon yashiriladi; filialga cheklangan xodimga faqat o'z filiali."""
+    from .models import Branch
+    f = form.fields.get(name)
+    if f is None:
+        return
+    if not Branch.objects.exists() or form.lock_branch:
+        del form.fields[name]  # filialga cheklangan xodim: filial view'da avtomatik qo'yiladi
+        return
+    f.empty_label = "Umumiy / tanlanmagan"
+    if form.branch_id and not form.instance.pk:
+        form.initial.setdefault(name, form.branch_id)
+
+
+class BranchForm(StyledModelForm):
+    rows = [["address", "phone"]]
+
+    class Meta:
+        from .models import Branch
+        model = Branch
+        fields = ["name", "address", "phone"]

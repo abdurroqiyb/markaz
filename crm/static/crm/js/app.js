@@ -77,3 +77,65 @@
   // Xabarlar 6 soniyadan keyin yashiriladi.
   setTimeout(()=>document.querySelectorAll(".msgs .banner.success").forEach(b=>b.remove()),6000);
 })();
+
+/* Tezkor qidiruv (Ctrl+K), saralanadigan jadvallar, jadval ichida qidirish. */
+(function(){
+  const pal=document.getElementById("kpal"),cfgEl=document.getElementById("knav");
+  if(pal&&cfgEl){
+    const cfg=JSON.parse(cfgEl.textContent),inp=document.getElementById("kq"),list=document.getElementById("klist");
+    let items=[],sel=0,t,ctl;
+    const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    const norm=s=>String(s||"").toLowerCase().replace(/[‘’`ʻʼ]/g,"'");
+    function draw(){
+      list.innerHTML=items.length?items.map((x,i)=>`<li role="option" aria-selected="${i===sel}" data-i="${i}"><span class="kk">${esc(x.k)}</span><span class="kt">${esc(x.t)}${x.sub?`<small>${esc(x.sub)}</small>`:""}</span></li>`).join(""):`<li class="kempty">Hech narsa topilmadi</li>`;
+      const a=list.querySelector('[aria-selected="true"]');if(a)a.scrollIntoView({block:"nearest"});
+    }
+    function local(q){
+      const n=norm(q);
+      const nav=cfg.nav.filter(x=>!n||norm(x.t).includes(n)).map(x=>({...x,k:"Bo'lim"}));
+      const act=cfg.act.filter(x=>!n||norm(x.t).includes(n)).map(x=>({...x,k:"Amal"}));
+      return n?[...act,...nav]:[...act,...nav.slice(0,8)];
+    }
+    async function search(q){
+      items=local(q);sel=0;draw();
+      if(q.trim().length<2)return;
+      clearTimeout(t);t=setTimeout(async()=>{
+        try{ctl&&ctl.abort();ctl=new AbortController();
+          const r=await fetch(cfg.api+"?q="+encodeURIComponent(q),{signal:ctl.signal,headers:{"x-requested-with":"fetch"}});
+          const j=await r.json();items=[...j.items,...local(q)];sel=0;draw()}catch(e){}
+      },160);
+    }
+    function open(){pal.hidden=false;inp.value="";search("");setTimeout(()=>inp.focus(),10)}
+    function close(){pal.hidden=true}
+    function go(i){const x=items[i];if(x){location.href=x.url}}
+    document.getElementById("kopen")?.addEventListener("click",open);
+    document.addEventListener("keydown",e=>{
+      if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();pal.hidden?open():close();return}
+      if(pal.hidden)return;
+      if(e.key==="Escape"){close()}
+      else if(e.key==="ArrowDown"){e.preventDefault();sel=Math.min(items.length-1,sel+1);draw()}
+      else if(e.key==="ArrowUp"){e.preventDefault();sel=Math.max(0,sel-1);draw()}
+      else if(e.key==="Enter"){e.preventDefault();go(sel)}
+    });
+    inp.addEventListener("input",()=>search(inp.value));
+    list.addEventListener("click",e=>{const li=e.target.closest("li[data-i]");if(li)go(+li.dataset.i)});
+    pal.addEventListener("click",e=>{if(e.target===pal)close()});
+  }
+
+  // Jadval ustunini bosib saralash: <table class="tbl sortable">, qiymat data-v yoki matn.
+  document.querySelectorAll("table.tbl").forEach(tb=>{if(!tb.tHead||!tb.tBodies[0])return;
+    const ths=[...tb.tHead.rows[0].cells];
+    ths.forEach((th,ci)=>{
+      th.tabIndex=0;th.classList.add("sth");th.title="Saralash";
+      const sort=()=>{
+        const asc=th.dataset.dir!=="asc";ths.forEach(x=>delete x.dataset.dir);th.dataset.dir=asc?"asc":"desc";
+        const body=tb.tBodies[0],rows=[...body.rows];
+        const val=r=>{const c=r.cells[ci];if(!c)return"";const v=c.dataset.v!==undefined?c.dataset.v:c.textContent.trim();
+          const n=parseFloat(String(v).replace(/[\s%]/g,"").replace(",","."));return isNaN(n)?v.toLowerCase():n};
+        rows.sort((a,b)=>{const x=val(a),y=val(b);return (x>y?1:x<y?-1:0)*(asc?1:-1)});
+        rows.forEach(r=>body.appendChild(r));
+      };
+      th.addEventListener("click",sort);th.addEventListener("keydown",e=>{if(e.key==="Enter")sort()});
+    });
+  });
+})();

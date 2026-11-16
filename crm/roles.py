@@ -22,20 +22,31 @@ ACCESS = {
     "marketolog": ["bugun", "lidlar", "marketing", "vazifalar", "jadval", "qidiruv"],
 }
 # Faqat direktor: boshqa xodimga ham berib bo'lmaydi.
-DIRECTOR_ONLY = ["xodimlar", "jurnal", "zaxira", "tg_settings"]
+DIRECTOR_ONLY = ["xodimlar", "jurnal", "zaxira", "tg_settings", "filiallar"]
 # Standart holatda faqat direktor, lekin direktor xodimga alohida ochib berishi mumkin.
-ADMIN_ONLY = ["xarajatlar", "hisobotlar"] + DIRECTOR_ONLY
+ADMIN_ONLY = ["xarajatlar", "hisobotlar", "moliya"] + DIRECTOR_ONLY
 
 NAV = [
-    ("kabinet", "Kabinetim", "book"),
-    ("bugun", "Bugun", "sun"), ("dashboard", "Asosiy", "home"), ("lidlar", "Lidlar", "funnel"),
+    ("kabinet", "Kabinetim", "book"), ("bugun", "Bugun", "sun"), ("dashboard", "Asosiy", "home"),
     ("talabalar", "Talabalar", "cap"), ("guruhlar", "Guruhlar", "users"), ("jadval", "Jadval", "cal"),
-    ("davomat", "Davomat", "check"), ("imtihon", "Imtihonlar", "trend"), ("tolovlar", "To'lovlar", "wallet"), ("vazifalar", "Vazifalar", "task"),
-    ("marketing", "Marketing", "mega"), ("hisobotlar", "Hisobotlar", "chart"),
-    ("xarajatlar", "Xarajatlar", "receipt"), ("xodimlar", "Xodimlar", "badge"),
-    ("jurnal", "Jurnal", "clock"), ("zaxira", "Zaxira", "down"), ("tg_settings", "Telegram bot", "send"), ("qidiruv", "Qidiruv", "search"),
+    ("davomat", "Davomat", "check"), ("imtihon", "Imtihonlar", "trend"),
+    ("lidlar", "Lidlar", "funnel"), ("marketing", "Marketing", "mega"), ("vazifalar", "Vazifalar", "task"),
+    ("tolovlar", "To'lovlar", "wallet"), ("xarajatlar", "Xarajatlar", "receipt"), ("hisobotlar", "Hisobotlar", "chart"),
+    ("moliya", "Moliya tahlili", "pie"),
+    ("xodimlar", "Xodimlar", "badge"), ("filiallar", "Filiallar", "pin"), ("tg_settings", "Telegram bot", "send"),
+    ("zaxira", "Zaxira", "down"), ("jurnal", "Jurnal", "clock"), ("qidiruv", "Qidiruv", "search"),
     ("xavfsizlik", "Xavfsizlik", "shield"),
 ]
+# Yon panelda bo'limlar guruhlari
+NAV_GROUP = {
+    "kabinet": "", "bugun": "", "dashboard": "",
+    "talabalar": "O'quv jarayoni", "guruhlar": "O'quv jarayoni", "jadval": "O'quv jarayoni",
+    "davomat": "O'quv jarayoni", "imtihon": "O'quv jarayoni",
+    "lidlar": "Sotuv", "marketing": "Sotuv", "vazifalar": "Sotuv",
+    "tolovlar": "Moliya", "xarajatlar": "Moliya", "hisobotlar": "Moliya", "moliya": "Moliya",
+    "xodimlar": "Boshqaruv", "filiallar": "Boshqaruv", "tg_settings": "Boshqaruv", "zaxira": "Boshqaruv",
+    "jurnal": "Boshqaruv", "qidiruv": "Boshqaruv", "xavfsizlik": "Boshqaruv",
+}
 SECTION_LABELS = {k: t for k, t, _ in NAV}
 # Har bir foydalanuvchiga ochiq (o'z paroli, 2FA, kirishlari).
 ALWAYS = ["xavfsizlik"]

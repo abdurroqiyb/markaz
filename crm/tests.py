@@ -602,3 +602,69 @@ class DemoSpeedTest(Base):
         self.assertEqual(r.status_code, 302)
         self.assertTrue(Student.objects.filter(is_demo=True).count() > 50)
         self.assertLess(len(c.captured_queries), 150)
+
+
+class BranchFinanceTest(Base):
+    def setUp(self):
+        super().setUp()
+        from .models import Branch
+        self.b1, self.b2 = Branch.objects.create(name="Chilonzor"), Branch.objects.create(name="Yunusobod")
+        self.g1 = Group.objects.create(name="G1", price=300000, filial=self.b1)
+        self.g2 = Group.objects.create(name="G2", price=400000, filial=self.b2)
+        self.s1 = Student.objects.create(name="Ali", group=self.g1, join_date=date(2020, 1, 1))
+        self.s2 = Student.objects.create(name="Vali", group=self.g2, join_date=date(2020, 1, 1))
+        self.admin = User.objects.create_user("adm", password="Kuchli-parol-123")
+        Staff.objects.create(user=self.admin, role="administrator", filial=self.b2)
+
+    def test_student_inherits_group_branch(self):
+        self.assertEqual(self.s1.filial, self.b1)
+        self.s1.group = self.g2
+        self.s1.save()
+        self.assertEqual(self.s1.filial, self.b2)
+
+    def test_locked_admin_sees_only_own_branch(self):
+        self.client.force_login(self.admin)
+        r = self.client.get(reverse("talabalar"))
+        self.assertContains(r, "Vali")
+        self.assertNotContains(r, "Ali<")
+        self.assertEqual(self.client.get(reverse("student_profile", args=[self.s1.pk])).status_code, 404)
+        # filialni almashtira olmaydi
+        self.client.post(reverse("filial_switch"), {"filial": self.b1.pk})
+        self.assertNotContains(self.client.get(reverse("talabalar")), "Ali<")
+        # yangi lid avtomatik o'z filialiga
+        self.client.post(reverse("lead_add"), {"name": "Yangi lid", "source": "Instagram", "status": "yangi"})
+        self.assertEqual(Lead.objects.get(name="Yangi lid").filial, self.b2)
+
+    def test_director_switches_branch(self):
+        self.assertContains(self.client.get(reverse("talabalar")), "Ali")
+        self.client.post(reverse("filial_switch"), {"filial": self.b1.pk})
+        r = self.client.get(reverse("talabalar"))
+        self.assertContains(r, "Ali")
+        self.assertNotContains(r, "Vali")
+        self.client.post(reverse("filial_switch"), {"filial": ""})
+        self.assertContains(self.client.get(reverse("talabalar")), "Vali")
+
+    def test_finance_page_and_leave_reason(self):
+        r = self.client.post(reverse("student_edit", args=[self.s1.pk]),
+                             {"name": "Ali", "group": self.g1.pk, "status": "tark", "discount": 0,
+                              "join_date": "2020-01-01"})
+        self.assertEqual(r.status_code, 200)  # sabab majburiy
+        r = self.client.post(reverse("student_edit", args=[self.s1.pk]),
+                             {"name": "Ali", "group": self.g1.pk, "status": "tark", "discount": 0,
+                              "join_date": "2020-01-01", "leave_reason": "narx"})
+        self.assertEqual(r.status_code, 302)
+        from .models import StatusChange
+        self.assertEqual(StatusChange.objects.filter(student=self.s1, status="tark").first().reason, "narx")
+        r = self.client.get(reverse("moliya"))
+        self.assertContains(r, "Narx qimmat")
+        self.assertContains(r, "Chilonzor")
+
+    def test_palette_search(self):
+        r = self.client.get(reverse("palette") + "?q=val")
+        self.assertEqual(r.json()["items"][0]["t"], "Vali")
+        self.client.force_login(self.admin)
+        self.assertEqual([x["t"] for x in self.client.get(reverse("palette") + "?q=ali").json()["items"]], ["Vali"])
+
+    def test_branch_pages(self):
+        for name in ["filiallar", "moliya", "kassa", "guruhlar", "hisobotlar", "dashboard"]:
+            self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)

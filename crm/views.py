@@ -21,6 +21,7 @@ from django.views.decorators.http import require_POST
 from . import services as sv
 from . import backup as bk
 from . import telegram as tg
+from . import branches as brs
 from .forms import (AdForm, CenterForm, ExpenseForm, GradeForm, GroupForm, ImportForm,
                     LeadCallForm, LeadForm, PaymentForm, PlanForm, PromoForm, RefundForm,
                     ResetPasswordForm, RestoreForm, ScriptForm, StaffCreateForm, StaffEditForm,
@@ -75,6 +76,8 @@ def scoped_student(request, pk):
     scope = sv.my_group_ids(request.user)
     if scope is not None and s.group_id not in scope:
         raise Http404("Talaba topilmadi")
+    if getattr(request.user, "branch_locked", False) and s.filial_id not in (brs.active(request), None):
+        raise Http404("Talaba boshqa filialda")
     return s
 
 
@@ -169,6 +172,8 @@ def lidlar(request):
     f = request.GET.get("f", "all")
     v = request.GET.get("v", "list")
     all_leads = list(Lead.objects.all().prefetch_related("calls"))
+    if brs.active(request):
+        all_leads = [l for l in all_leads if l.filial_id in (brs.active(request), None)]
     rows = [l for l in all_leads if (f == "all" or l.status == f) and
             (not q or q.lower() in f"{l.name} {l.phone} {l.course}".lower())]
     counts = {k: sum(1 for l in all_leads if l.status == k) for k, _ in Lead.STATUSES}
@@ -184,9 +189,10 @@ def lidlar(request):
 @section_required("lidlar")
 def lead_form(request, pk=None):
     obj = get_object_or_404(Lead, pk=pk) if pk else None
-    form = LeadForm(request.POST or None, instance=obj)
+    form = LeadForm(request.POST or None, instance=obj, **brs.form_kw(request))
     if request.method == "POST" and form.is_valid():
-        l = form.save()
+        l = brs.stamp(request, form.save(commit=False))
+        l.save()
         log(request, f"Lid {verb(obj)}: {l.name}")
         messages.success(request, "Saqlandi")
         return back(request, "lidlar")
@@ -272,10 +278,11 @@ def student_form(request, pk=None, from_lead=None):
     initial = {}
     if from_lead:
         initial = {"name": from_lead.name, "phone": from_lead.phone}
-    form = StudentForm(request.POST or None, instance=obj, initial=initial)
+    form = StudentForm(request.POST or None, instance=obj, initial=initial, **brs.form_kw(request))
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            s = form.save(commit=False)
+            s = brs.stamp(request, form.save(commit=False))
+            s._leave_reason = form.cleaned_data.get("leave_reason", "")
             msg = sv.apply_student_rules(s, previous)
             if from_lead:
                 s.lead = from_lead
@@ -426,6 +433,9 @@ def grade_delete(request, pk):
 
 # ---------------------------------------------------------------- guruhlar va jadval
 def branch_ctx(request, groups):
+    from .models import Branch
+    if Branch.objects.exists():  # filiallar yon paneldagi tanlov orqali
+        return "", []
     br = request.GET.get("br", "")
     branches = sorted({g.branch for g in groups if g.branch})
     return br, branches
@@ -448,9 +458,10 @@ def guruhlar(request):
 @section_required("guruhlar")
 def group_form(request, pk=None):
     obj = get_object_or_404(Group, pk=pk) if pk else None
-    form = GroupForm(request.POST or None, instance=obj)
+    form = GroupForm(request.POST or None, instance=obj, **brs.form_kw(request))
     if request.method == "POST" and form.is_valid():
-        g = form.save()
+        g = brs.stamp(request, form.save(commit=False))
+        g.save()
         log(request, f"Guruh {verb(obj)}: {g.name}")
         messages.success(request, "Saqlandi")
         return back(request, "guruhlar")
@@ -607,11 +618,12 @@ def payment_add(request):
         return redirect("talabalar")
     d = sv.Data(request.user)
     sid = request.GET.get("student")
-    st = (Student.objects.filter(pk=sid).first() if sid and sid.isdigit() else None) or \
-        Student.objects.filter(status="faol").order_by("name").first()
+    base_qs = Student.objects.filter(filial_id=brs.active(request)) if brs.active(request) else Student.objects.all()
+    st = (base_qs.filter(pk=sid).first() if sid and sid.isdigit() else None) or \
+        base_qs.filter(status="faol").order_by("name").first()
     initial = {"student": st, "month": m, "method": "Naqd", "date": sv.today(),
                "amount": d.debt_for(st, m) or None if st else None}
-    form = PaymentForm(request.POST or None, initial=initial, month=m)
+    form = PaymentForm(request.POST or None, initial=initial, month=m, branch=brs.active(request))
     if request.method == "POST" and form.is_valid():
         n = form.cleaned_data.get("months") or 1
         p = form.save(commit=False)
@@ -664,7 +676,7 @@ def api_debt(request):
 @require_POST
 def payment_delete(request, pk):
     p = get_object_or_404(Payment, pk=pk)
-    if CashClose.objects.filter(date=p.date).exists() and not is_director(request.user):
+    if sv.day_closed(p.date, p.student) and not is_director(request.user):
         messages.error(request, "Bu kun kassasi yopilgan. To'lovni faqat direktor o'chira oladi.")
         return back(request, f"{reverse('tolovlar')}?m={p.month}")
     log(request, f"To'lov o'chirildi: {p.student.name if p.student else ''} {sv.fmt(p.amount)} so'm")
@@ -737,9 +749,10 @@ def expense_add(request):
     initial = {"category": request.GET.get("category", "Boshqa"), "month": m, "date": sv.today(),
                "title": request.GET.get("title", ""), "teacher": request.GET.get("teacher", ""),
                "amount": request.GET.get("amount") or None}
-    form = ExpenseForm(request.POST or None, initial=initial, month=m)
+    form = ExpenseForm(request.POST or None, initial=initial, month=m, **brs.form_kw(request))
     if request.method == "POST" and form.is_valid():
-        x = form.save()
+        x = brs.stamp(request, form.save(commit=False))
+        x.save()
         log(request, f"Xarajat qo'shildi: {x.title}")
         messages.success(request, "Saqlandi")
         return redirect(f"{reverse('xarajatlar')}?m={x.month}")
@@ -847,9 +860,10 @@ def marketing(request):
 @section_required("marketing")
 def ad_add(request):
     m = sv.valid_month(request.GET.get("m") or request.POST.get("month"))
-    form = AdForm(request.POST or None, initial={"month": m, "source": "Instagram"}, month=m)
+    form = AdForm(request.POST or None, initial={"month": m, "source": "Instagram"}, month=m, **brs.form_kw(request))
     if request.method == "POST" and form.is_valid():
-        a = form.save()
+        a = brs.stamp(request, form.save(commit=False))
+        a.save()
         log(request, f"Reklama xarajati qo'shildi: {a.source} {sv.fmt(a.amount)} so'm")
         messages.success(request, "Saqlandi")
         return redirect(f"{reverse('marketing')}?m={a.month}")
@@ -1006,7 +1020,7 @@ def xodimlar(request):
         with transaction.atomic():
             u = User.objects.create_user(username=cd["username"], password=cd["password"],
                                          first_name=cd["first_name"], last_name=cd["last_name"])
-            Staff.objects.create(user=u, role=cd["role"], phone=cd.get("phone", ""))
+            Staff.objects.create(user=u, role=cd["role"], phone=cd.get("phone", ""), filial=cd.get("filial"))
             for g in cd.get("groups") or []:
                 g.teacher_user = u
                 g.teacher = u.get_full_name() or u.username
@@ -1081,7 +1095,7 @@ def staff_edit(request, pk):
     u = get_object_or_404(User, pk=pk, is_superuser=False)
     staff, _ = Staff.objects.get_or_create(user=u)
     initial = {"first_name": u.first_name, "last_name": u.last_name, "phone": staff.phone, "role": staff.role,
-               "custom": bool(staff.sections), "sections": staff.sections or sections_of(u)}
+               "custom": bool(staff.sections), "sections": staff.sections or sections_of(u), "filial": staff.filial_id}
     form = StaffEditForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         cd = form.cleaned_data
@@ -1089,6 +1103,8 @@ def staff_edit(request, pk):
             u.first_name, u.last_name = cd["first_name"], cd["last_name"]
             u.save(update_fields=["first_name", "last_name"])
             staff.phone, staff.role = cd["phone"], cd["role"]
+            if "filial" in form.fields:
+                staff.filial = cd.get("filial")
             staff.sections = cd["sections"] if cd["custom"] else []
             staff.save()
         log(request, f"Xodim o'zgartirildi: {u.get_full_name() or u.username}")
@@ -1112,7 +1128,7 @@ def staff_password(request, pk):
     staff, _ = Staff.objects.get_or_create(user=u)
     eform = StaffEditForm(initial={"first_name": u.first_name, "last_name": u.last_name, "phone": staff.phone,
                                    "role": staff.role, "custom": bool(staff.sections),
-                                   "sections": staff.sections or sections_of(u)})
+                                   "sections": staff.sections or sections_of(u), "filial": staff.filial_id})
     return render(request, "crm/staff_edit.html", {"section": "xodimlar", "form": eform, "u": u, "staff": staff,
                                                     "pform": form})
 
@@ -1341,7 +1357,8 @@ def export_xlsx(request):
           for p in sorted(d.payments, key=lambda p: p.date, reverse=True)]),
         ("Davomat", ["Sana", "Guruh", "Talaba", "Holati"],
          [[a.lesson.date, a.lesson.group.name, a.student.name, a.status]
-          for a in Attendance.objects.select_related("lesson__group", "student").order_by("-lesson__date")]),
+          for a in Attendance.objects.select_related("lesson__group", "student").order_by("-lesson__date")
+          if a.lesson.group_id in d.group_map]),
     ]
     if is_director(request.user):
         sheets.append(("Xarajatlar", ["Sana", "Nomi", "Turkum", "Oy", "Summa", "O'qituvchi"],
