@@ -230,3 +230,22 @@ class BackupTest(Base):
         for _ in range(bk.KEEP + 3):
             bk.make_backup()
         self.assertEqual(Backup.objects.count(), bk.KEEP)
+
+
+class CsrfTest(TestCase):
+    def setUp(self):
+        User.objects.create_user("ali", password="Kuchli-parol-123")
+        self.c = self.client_class(enforce_csrf_checks=True)
+
+    def test_stale_login_form_redirects_back(self):
+        r = self.c.post(reverse("login") + "?next=/talabalar/", {"username": "ali", "password": "Kuchli-parol-123"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], reverse("login") + "?next=/talabalar/")
+        r = self.c.get(r["Location"])
+        self.assertContains(r, "Sahifa eskirgan")
+
+    def test_other_page_friendly_403(self):
+        self.c.force_login(User.objects.get(username="ali"))
+        r = self.c.post(reverse("parol"), {})
+        self.assertEqual(r.status_code, 403)
+        self.assertContains(r, "Sahifani yangilash", status_code=403)
