@@ -1,0 +1,49 @@
+{% load static crm_tags %}<!doctype html>
+<html lang="uz" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hisobot {{ m_label }} · {{ center.name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="{% static 'crm/css/app.css' %}">
+<style>
+body{background:#e9ecf1}
+.sheet{max-width:860px;margin:24px auto;background:#fff;color:#0F1A2B;padding:36px 40px;border-radius:12px;box-shadow:0 10px 40px rgba(15,26,43,.12)}
+.rh{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #0F1A2B;padding-bottom:14px;margin-bottom:18px}
+.rh h1{font-size:24px;margin:0}.rh p{margin:2px 0 0;color:#5F6B7C;font-size:13px}
+.kp{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.kp div{border:1px solid #E3E7ED;border-radius:10px;padding:10px 12px}.kp small{color:#5F6B7C;font-size:11px;display:block}.kp b{font:800 18px var(--f-display);font-variant-numeric:tabular-nums}
+.sheet h2{font-size:15px;margin:20px 0 8px}
+.sheet .tbl{font-size:12px}.sheet .tbl td,.sheet .tbl th{padding:6px 8px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.pbar{position:sticky;top:0;z-index:5;display:flex;justify-content:center;gap:8px;padding:10px;background:#0E1726}
+.foot{margin-top:24px;padding-top:10px;border-top:1px solid #E3E7ED;color:#5F6B7C;font-size:11px;display:flex;justify-content:space-between}
+@media (max-width:640px){.sheet{padding:20px 16px;margin:0;border-radius:0}.kp{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+@media print{@page{size:A4;margin:12mm}body{background:#fff}.pbar{display:none}.sheet{box-shadow:none;margin:0;padding:0;max-width:none;border-radius:0}
+  .chart .cbar,.chart .cline,.chart .carea,.chart .cdot,.hbt i{animation:none!important;opacity:1!important;stroke-dashoffset:0!important;transform:none!important}
+  section{break-inside:avoid}}
+</style></head><body>
+<div class="pbar"><button class="btn primary" type="button" onclick="window.print()">{% icon "print" %} PDF saqlash / chop etish</button><a class="btn" href="{% url 'hisobotlar' %}?m={{ m }}">Orqaga</a></div>
+{% include "crm/_icons.html" %}
+<div class="sheet">
+  <div class="rh"><div><h1>Oylik hisobot: {{ m_label }}</h1><p>{{ center.name|default:"O'quv markaz" }}{% if center.address %} · {{ center.address }}{% endif %}</p></div><div style="text-align:right"><p>Tuzilgan: {{ now|date:"d.m.Y H:i" }}</p>{% if center.director %}<p>Direktor: {{ center.director }}</p>{% endif %}</div></div>
+  <div class="kp">
+    <div><small>Tushum</small><b>{{ inc|som }}</b></div>
+    <div><small>Xarajat</small><b>{{ exp|som }}</b></div>
+    <div><small>Sof foyda</small><b style="color:{% if net >= 0 %}#0F7A4B{% else %}#B42318{% endif %}">{{ net|som }}</b></div>
+    <div><small>Faol talabalar</small><b>{{ students_n }}</b></div>
+    <div><small>Kutilgan to'lov</small><b>{{ expected_m|som }}</b></div>
+    <div><small>Oy qarzi</small><b>{{ debt_m|som }}</b></div>
+    <div><small>Marja</small><b>{% if margin is not None %}{{ margin }}%{% else %}-{% endif %}</b></div>
+    <div><small>Reja bajarilishi</small><b>{% if p_inc %}{{ inc_pct }}{% else %}-{% endif %}</b></div>
+  </div>
+  <section><h2>6 oylik dinamika</h2>{{ six|json_script:"six-data" }}<div data-src="six-data" data-chart='{"type":"columns","h":230,"aria":"6 oylik dinamika","series":[{"key":"i","label":"Tushum","color":"#2B59E6"},{"key":"e","label":"Xarajat","color":"#B7C0CE"},{"key":"net","label":"Sof foyda","color":"#0F7A4B","type":"line"}]}'></div></section>
+  <div class="two">
+    <section><h2>Guruhlar tushumi</h2>{% if grp_bars %}{{ grp_bars|json_script:"grp-data" }}<div data-src="grp-data" data-chart='{"type":"hbars","label":"Tushum","color":"#2B59E6"}'></div>{% else %}<p class="mut">Tushum yo'q.</p>{% endif %}</section>
+    <section><h2>Xarajatlar turlari</h2>{% if exp_cats %}{{ exp_cats|json_script:"ecat-data" }}<div data-src="ecat-data" data-chart='{"type":"hbars","label":"Xarajat","color":"#92580A"}'></div>{% else %}<p class="mut">Xarajat yo'q.</p>{% endif %}</section>
+  </div>
+  <section><h2>Guruhlar foydaliligi</h2><table class="tbl"><thead><tr><th>Guruh</th><th>Ustoz</th><th class="r">Talaba</th><th class="r">Tushum</th><th class="r">Ustoz oyligi</th><th class="r">Qoladi</th></tr></thead><tbody>
+  {% for r in rows %}<tr><td>{{ r.g.name }}</td><td>{{ r.g.teacher|default:"-" }}</td><td class="r">{{ r.n }}</td><td class="r">{{ r.i|som }}</td><td class="r">{{ r.sal|som }}</td><td class="r">{{ r.rest|som }}</td></tr>{% empty %}<tr><td colspan="6" class="mut">Guruh yo'q</td></tr>{% endfor %}</tbody></table></section>
+  <section><h2>6 oylik ko'rsatkich</h2><table class="tbl"><thead><tr><th>Oy</th><th class="r">Tushum</th><th class="r">Xarajat</th><th class="r">Foyda</th><th class="r">To'lovlar</th></tr></thead><tbody>{% for k in six %}<tr><td>{{ k.label }}</td><td class="r">{{ k.i|som }}</td><td class="r">{{ k.e|som }}</td><td class="r">{{ k.net|som }}</td><td class="r">{{ k.n }}</td></tr>{% endfor %}</tbody></table></section>
+  <div class="foot"><span>Markaz CRM</span><span>{{ center.phone }}</span></div>
+</div>
+<script src="{% static 'crm/js/charts.js' %}"></script>
+</body></html>

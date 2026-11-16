@@ -17,8 +17,8 @@ ROLES = {"direktor": "Direktor", "administrator": "Administrator",
 
 ACCESS = {
     "administrator": ["bugun", "dashboard", "lidlar", "talabalar", "guruhlar", "jadval", "davomat",
-                      "tolovlar", "vazifalar", "qidiruv"],
-    "oqituvchi": ["kabinet", "bugun", "jadval", "davomat", "talabalar", "vazifalar", "qidiruv"],
+                      "imtihon", "tolovlar", "vazifalar", "qidiruv"],
+    "oqituvchi": ["kabinet", "bugun", "jadval", "davomat", "imtihon", "talabalar", "vazifalar", "qidiruv"],
     "marketolog": ["bugun", "lidlar", "marketing", "vazifalar", "jadval", "qidiruv"],
 }
 # Faqat direktor: boshqa xodimga ham berib bo'lmaydi.
@@ -30,14 +30,17 @@ NAV = [
     ("kabinet", "Kabinetim", "book"),
     ("bugun", "Bugun", "sun"), ("dashboard", "Asosiy", "home"), ("lidlar", "Lidlar", "funnel"),
     ("talabalar", "Talabalar", "cap"), ("guruhlar", "Guruhlar", "users"), ("jadval", "Jadval", "cal"),
-    ("davomat", "Davomat", "check"), ("tolovlar", "To'lovlar", "wallet"), ("vazifalar", "Vazifalar", "task"),
+    ("davomat", "Davomat", "check"), ("imtihon", "Imtihonlar", "trend"), ("tolovlar", "To'lovlar", "wallet"), ("vazifalar", "Vazifalar", "task"),
     ("marketing", "Marketing", "mega"), ("hisobotlar", "Hisobotlar", "chart"),
     ("xarajatlar", "Xarajatlar", "receipt"), ("xodimlar", "Xodimlar", "badge"),
-    ("jurnal", "Jurnal", "clock"), ("zaxira", "Zaxira", "shield"), ("qidiruv", "Qidiruv", "search"),
+    ("jurnal", "Jurnal", "clock"), ("zaxira", "Zaxira", "down"), ("qidiruv", "Qidiruv", "search"),
+    ("xavfsizlik", "Xavfsizlik", "shield"),
 ]
 SECTION_LABELS = {k: t for k, t, _ in NAV}
+# Har bir foydalanuvchiga ochiq (o'z paroli, 2FA, kirishlari).
+ALWAYS = ["xavfsizlik"]
 # Direktor xodimga belgilab berishi mumkin bo'lgan bo'limlar.
-GRANTABLE = [k for k, _, _ in NAV if k not in DIRECTOR_ONLY]
+GRANTABLE = [k for k, _, _ in NAV if k not in DIRECTOR_ONLY and k not in ALWAYS]
 
 
 def role_of(user):
@@ -58,7 +61,7 @@ def sections_of(user):
         return [k for k, _, _ in NAV]
     staff = getattr(user, "staff", None)
     custom = [k for k in (staff.sections if staff else None) or [] if k in GRANTABLE]
-    base = custom or ACCESS.get(r, [])
+    base = (custom or ACCESS.get(r, [])) + ALWAYS
     return [k for k, _, _ in NAV if k in base and k not in DIRECTOR_ONLY]
 
 

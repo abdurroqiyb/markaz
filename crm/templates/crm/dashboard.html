@@ -41,9 +41,13 @@
 </div>
 <div class="cols">
   {% if can_money %}<section class="panel wide"><h2>So'nggi 6 oy</h2><div id="chart6" data-admin="{{ admin|yesno:'1,0' }}"></div>{{ chart|json_script:"chart6-data" }}</section>{% endif %}
+  {{ series6|json_script:"s6-data" }}
+  {% if can_money %}<section class="panel"><h2>To'lov yig'ilishi</h2><div data-src="s6-data" data-chart='{"type":"columns","h":240,"aria":"Reja va yig&#39;ilgan to&#39;lov","series":[{"key":"plan","label":"Kutilgan","color":"var(--bar2)"},{"key":"got","label":"Yig&#39;ilgan","color":"var(--accent)"}]}'></div></section>{% endif %}
+  <section class="panel"><h2>Davomat dinamikasi</h2><div data-src="s6-data" data-chart='{"type":"columns","h":240,"unit":"%","max":100,"aria":"Oylik davomat foizi","series":[{"key":"att","label":"Davomat","color":"var(--good)","type":"line"}]}'></div></section>
+  {% if admin %}<section class="panel"><h2>Xarajatlar turlari <small class="mut">{{ now_label }}</small></h2>{% if exp_cats %}{{ exp_cats|json_script:"ecat-data" }}<div data-src="ecat-data" data-chart='{"type":"hbars","label":"Xarajat","color":"var(--warn)"}'></div>{% else %}<p class="mut m0">Bu oy xarajat yozilmagan.</p>{% endif %}</section>{% endif %}
   <section class="panel"><h2>Lid manbalari</h2>{% if sources %}<div id="donut"></div>{{ sources|json_script:"donut-data" }}{% else %}<p class="mut m0">Lid qo'shilgach qaysi manba samarali ekani shu yerda ko'rinadi.</p>{% endif %}</section>
   <section class="panel"><h2>Lidlar voronkasi</h2>
-    {% if d.leads %}<div class="funnel">{% for r in funnel.rows %}<div class="frow2"><div class="fbar" style="width:{{ r.w }}%"><span>{{ r.label }}</span><b>{{ r.n }}</b></div><small>{% if r.pct is not None %}{{ r.pct }}%{% endif %}</small></div>{% endfor %}</div>
+    {% if d.leads %}<div class="funnel">{% for r in funnel.rows %}<div class="frow2"><div class="fbar" style="width:{{ r.w|stringformat:'.1f' }}%"><span>{{ r.label }}</span><b>{{ r.n }}</b></div><small>{% if r.pct is not None %}{{ r.pct }}%{% endif %}</small></div>{% endfor %}</div>
     <p style="margin:8px 0 0;color:var(--muted);font-size:12px">Rad etganlar: {{ funnel.rad }}. O'ngdagi foiz oldingi bosqichdan o'tganlar ulushi.</p>
     {% else %}<p class="mut m0">Lid qo'shilgach voronka shu yerda ko'rinadi.</p>{% endif %}
   </section>

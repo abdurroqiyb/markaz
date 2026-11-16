@@ -1,12 +1,23 @@
 {% extends "crm/base.html" %}
 {% block title %}Dars jadvali{% endblock %}
 {% block content %}
-<div class="head"><div><h1>Dars jadvali</h1><p class="sub">Haftalik jadval, xona va o'qituvchi to'qnashuvlari bilan</p></div></div>
+{% load crm_tags %}
+<div class="head"><div><h1>Dars jadvali</h1><p class="sub">Haftalik jadval, xona va o'qituvchi to'qnashuvlari bilan</p></div>
+<div class="viewtog" role="group" aria-label="Ko'rinish"><a class="vt" href="{% qs v='list' %}" aria-pressed="{% if view == 'list' %}true{% else %}false{% endif %}">Ro'yxat</a><a class="vt" href="{% qs v='kal' %}" aria-pressed="{% if view == 'kal' %}true{% else %}false{% endif %}">Kalendar</a></div></div>
 {% include "crm/p/branches.html" %}
 {% if not has %}<div class="empty"><h2>Jadval bo'sh</h2><p>Guruhga dars kunlari (masalan Du-Chor-Ju) va vaqtini (18:00-19:30) kiriting, jadval shu yerda chiqadi.</p></div>
 {% else %}
 {% if conflicts %}<div class="banner error">To'qnashuvlar: {{ conflicts|join:"; " }}</div>{% endif %}
+{% if view == "kal" %}
+<div class="calwrap"><div class="cal" style="--nh:{{ nh }}">
+  <div class="calhours"><div class="calhead"></div><div class="calbody">{% for h in hours %}<span>{{ h }}</span>{% endfor %}</div></div>
+  {% for day in cal %}<div class="calday{% if day.today %} today{% endif %}"><div class="calhead">{{ day.name }}</div><div class="calbody">
+    {% for b in day.blocks %}<div class="calev{% if b.bad %} bad{% endif %}" style="top:{{ b.top|stringformat:'.2f' }}%;height:{{ b.h|stringformat:'.2f' }}%;--ev:var(--av{{ b.c }})" title="{{ b.g.name }} · {{ b.time }}{% if b.g.room %} · {{ b.g.room }}{% endif %}"><b>{{ b.g.name }}</b><small>{{ b.time }}</small><small>{{ b.g.teacher }}{% if b.g.room %} · {{ b.g.room }}{% endif %}</small></div>{% endfor %}
+  </div></div>{% endfor %}
+</div></div>
+{% else %}
 <div class="sched">{% for day in days %}<section class="day{% if day.today %} today{% endif %}"><h2>{{ day.name }}{% if day.today %} <span class="pill info">Bugun</span>{% endif %}</h2>
   {% for x in day.items %}<div class="slot{% if x.bad %} bad{% endif %}"><b>{{ x.time }}</b><span>{{ x.g.name }}</span><small>{{ x.g.teacher }}{% if x.g.teacher and x.g.room %} · {% endif %}{{ x.g.room }}</small></div>{% empty %}<p class="none">Dars yo'q</p>{% endfor %}</section>{% endfor %}</div>
+{% endif %}
 {% endif %}
 {% endblock %}

@@ -116,7 +116,7 @@ def bugun(request):
         "section": "bugun", "d": d, "lead_ok": allowed(u, "lidlar"), "greet": greet(), "first": first_name(u), "role": ROLES[role_of(u)],
         "lessons_today": d.lessons_today(u), "my_tasks": sorted(my_tasks, key=lambda t: t.due or date.max)[:6],
         "due_leads": d.due_leads()[:6], "trials": d.trials()[:6], "bdays": d.birthdays()[:6],
-        "debtors": d.debtors(d.NOW)[:5] if can_money(u) else [], "returning": d.returning()[:6],
+        "debtors": sv.with_reminders(d, d.debtors(d.NOW)[:5], d.NOW) if can_money(u) else [], "returning": d.returning()[:6],
         "paused": d.paused_count(), "ending": d.course_ending(),
     })
 
@@ -150,9 +150,10 @@ def dashboard(request):
         "spark_students": d.month_series_students(), "spark_leads": d.month_series_leads(),
         "spark_inc": [c["inc"] for c in chart], "spark_exp": [c["exp"] for c in chart],
         "chart": chart, "sources": d.sources(), "funnel": d.funnel(),
+        "series6": d.series6(), "exp_cats": d.expense_cats(d.NOW) if admin else [],
         "group_fill": [fill_item(d, g) for g in d.groups],
         "rate_label": f"{round(rate * 100)}%" if expected else "-",
-        "debtors": d.debtors(d.NOW)[:6], "risks": d.risks()[:6], "waiting": d.waiting()[:6],
+        "debtors": sv.with_reminders(d, d.debtors(d.NOW)[:6], d.NOW), "risks": d.risks()[:6], "waiting": d.waiting()[:6],
         "due_leads": d.due_leads()[:6], "trials": d.trials()[:6], "bdays": d.birthdays()[:6],
         "returning": d.returning()[:6], "paused": d.paused_count(), "ending": d.course_ending(),
         "my_tasks": sorted(my_tasks, key=lambda t: t.due or date.max)[:6],
@@ -424,8 +425,26 @@ def jadval(request):
         items = sorted([g for g in gs if i in sv.parse_days(g.days)], key=lambda g: (sv.parse_time(g.time) or (0,))[0])
         days.append({"name": dn, "today": i == tdy,
                      "items": [{"g": g, "time": sv.time_range(g), "bad": g.id in cf} for g in items]})
+    # Kalendar ko'rinishi: soatlar to'ri, blok balandligi dars davomiyligiga teng.
+    times = [sv.parse_time(g.time) for g in gs if sv.parse_time(g.time)]
+    h0 = min([t[0] // 60 for t in times] + [9]) if times else 9
+    h1 = max([-(-t[1] // 60) for t in times] + [h0 + 4]) if times else 18
+    colors = {g.id: i % 6 for i, g in enumerate(sorted(d.groups, key=lambda g: g.id))}
+    cal = []
+    for day in days:
+        blocks = []
+        for x in day["items"]:
+            t = sv.parse_time(x["g"].time)
+            if not t:
+                continue
+            blocks.append({**x, "top": (t[0] - h0 * 60) / ((h1 - h0) * 60) * 100,
+                           "h": max(4.0, (t[1] - t[0]) / ((h1 - h0) * 60) * 100), "c": colors.get(x["g"].id, 0)})
+        cal.append({"name": day["name"], "short": day["name"][:2], "today": day["today"], "blocks": blocks})
+    view = "kal" if request.GET.get("v") == "kal" else "list"
     return render(request, "crm/jadval.html", {"section": "jadval", "days": days, "conflicts": cf_list,
-                                                "br": br, "branches": branches, "has": bool(gs)})
+                                                "br": br, "branches": branches, "has": bool(gs), "view": view,
+                                                "cal": cal, "hours": [f"{h:02d}:00" for h in range(h0, h1)],
+                                                "nh": h1 - h0})
 
 
 # ---------------------------------------------------------------- davomat
@@ -499,7 +518,7 @@ def tolovlar(request):
     m = month_param(request)
     pays = sorted([p for p in d.payments if p.month == m], key=lambda p: (p.date, p.created_at), reverse=True)
     total = sum(p.amount for p in pays)
-    ds = d.debtors(m)
+    ds = sv.with_reminders(d, d.debtors(m), m)
     exp = d.expected_for(m)
     frozen = any(k[1] == m for k in d.charges)
     allrows = sorted([{"s": s, "t": d.total_debt(s), "od": d.overdue_months(s)}
@@ -507,9 +526,7 @@ def tolovlar(request):
     allrows = [r for r in allrows if r["t"] > 0][:12]
     meth = [(n, sum(p.amount for p in pays if p.method == n)) for n, _ in Payment.METHODS]
     mmx = max([1] + [v for _, v in meth])
-    debt_text = "\n".join(
-        f"Assalomu alaykum! {x['s'].name} uchun {sv.mlabel(m)} oyi to'lovidan {sv.fmt(x['debt'])} so'm qolgan."
-        + (f" ({x['s'].parent or x['s'].phone})" if (x['s'].parent or x['s'].phone) else "") for x in ds)
+    debt_text = "\n\n".join(x["msg"] + (f" ({x['to']})" if x["to"] else "") for x in ds)
     return render(request, "crm/tolovlar.html", {
         "section": "tolovlar", **month_nav(request, m), "pays": [{"p": p, "s": d.student_map.get(p.student_id)} for p in pays],
         "total": total, "debtors": ds, "dsum": sum(x["debt"] for x in ds), "expected": exp,
@@ -610,7 +627,8 @@ def xarajatlar(request):
     sal = []
     for t in d.teacher_salaries(m):
         paid = sum(x.amount for x in ex if x.category in ("Maosh", "Avans") and x.teacher == t["name"])
-        sal.append({**t, "paid": paid, "rest": max(0, t["salary"] - paid)})
+        sal.append({**t, "paid": paid, "rest": max(0, t["salary"] - paid),
+                    "pct": min(100, round(paid / t["salary"] * 100)) if t["salary"] else 0})
     return render(request, "crm/xarajatlar.html", {"section": "xarajatlar", **month_nav(request, m), "ex": ex,
                                                     "inc": inc, "ex_sum": ex_sum, "profit": inc - ex_sum, "sal": sal})
 
@@ -835,7 +853,11 @@ def hisobotlar(request):
         i, e = d.income(k), d.month_exp(k)
         six.append({"label": sv.mlabel(k), "short": sv.SHORT[int(k[5:]) - 1], "i": i, "e": e, "net": i - e,
                     "n": sum(1 for p in d.payments if p.month == k and not p.refund and p.amount > 0)})
-    return render(request, "crm/hisobotlar.html", {
+    tpl = "crm/hisobot_print.html" if request.GET.get("chop") else "crm/hisobotlar.html"
+    return render(request, tpl, {
+        "now": timezone.localtime(), "students_n": sum(1 for s in d.students if s.status == "faol"),
+        "debt_m": sum(x["debt"] for x in d.debtors(m)), "expected_m": d.expected_for(m),
+        "exp_cats": d.expense_cats(m),
         "section": "hisobotlar", **month_nav(request, m), "inc": inc, "exp": exp, "net": inc - exp,
         "margin": sv.pct(inc - exp, inc) if inc else None, "p_inc": c.plan_income, "p_exp": c.plan_expense,
         "inc_rate": min(1, inc / c.plan_income) if c.plan_income else 0, "inc_pct": f"{sv.pct(inc, c.plan_income)}%",
@@ -1035,7 +1057,23 @@ def zaxira(request):
     return render(request, "crm/zaxira.html", {
         "section": "zaxira", "rows": rows, "last": last, "form": RestoreForm(),
         "db_engine": settings.DB_ENGINE, "db_persistent": settings.DB_PERSISTENT,
+        "targets": bk.offsite_targets(),
     })
+
+
+@section_required("zaxira")
+@require_POST
+def backup_send(request, pk):
+    b = get_object_or_404(Backup.objects.defer("data"), pk=pk)
+    if not bk.offsite_targets():
+        messages.error(request, "Tashqi manzil sozlanmagan (Telegram yoki e-pochta). Pastdagi yo'riqnomaga qarang.")
+        return redirect("zaxira")
+    done, errors = bk.send_offsite(b.pk)
+    if done:
+        messages.success(request, f"Yuborildi: {', '.join(done)}")
+    if errors:
+        messages.error(request, "Yuborilmadi: " + "; ".join(errors))
+    return redirect("zaxira")
 
 
 @section_required("zaxira")

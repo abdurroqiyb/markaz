@@ -22,6 +22,8 @@
     {% with f=pform.password %}<div class="field{% if f.errors %} has-err{% endif %}"><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% if f.errors %}<small class="err">{{ f.errors|join:" " }}</small>{% else %}<small class="help">Kamida 8 belgi. Yangi parolni xodimga o'zingiz yetkazing.</small>{% endif %}</div>{% endwith %}
     <div class="fbtns"><button class="btn">Parolni o'rnatish</button></div>
   </form>
+  <div class="mini" style="margin-top:14px"><span><b>Ikki bosqichli kirish</b><br><small class="mut">{% if staff.totp_enabled %}Yoqilgan. Telefonini yo'qotsa, shu yerdan o'chiring.{% else %}Yoqilmagan. Xodim o'zi "Xavfsizlik" bo'limida yoqadi.{% endif %}</small></span>
+    {% if staff.totp_enabled %}<form method="post" action="{% url 'twofa_reset' u.pk %}" class="inl">{% csrf_token %}<button class="btn sm danger" data-confirm>O'chirish</button></form>{% else %}<span class="pill mute">O'chiq</span>{% endif %}</div>
 </section>
 </div>
 {% endblock %}

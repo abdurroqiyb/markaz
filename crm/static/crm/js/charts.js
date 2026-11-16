@@ -67,7 +67,7 @@
     o=o||{};const unit=o.unit==null?"so'm":o.unit;
     const bars=series.filter(s=>s.type!=="line"),lines=series.filter(s=>s.type==="line");
     const all=data.flatMap(d=>series.map(s=>Number(d[s.key]||0)));
-    const mx=niceCeil(Math.max(1,...all)),mn=Math.min(0,...all)<0?-niceCeil(-Math.min(...all)):0;
+    const mx=o.max||niceCeil(Math.max(1,...all)),mn=Math.min(0,...all)<0?-niceCeil(-Math.min(...all)):0;
     const mob=innerWidth<640,W=Math.max(300,Math.round(o.w||(mob?400:900))),H=o.h||(W<520?240:290),
       L=Math.max(40,...[0,1,2,3,4].map(i=>compact(mn+(mx-mn)*i/4).length*6.4+14)),R=12,T=18,B=30,pw=W-L-R,ph=H-T-B,n=data.length,gw=pw/n;
     const inner=Math.min(gw*.62,W<520?44:92),bw=Math.max(6,(inner-(bars.length-1)*4)/Math.max(1,bars.length));

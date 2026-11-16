@@ -1,0 +1,28 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Imtihonlar{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Imtihon va test natijalari</h1><p class="sub">Guruh bo'yicha ballarni bir yo'la kiriting, reyting avtomatik chiqadi</p></div></div>
+{% if no_groups %}<div class="empty"><h2>Guruh yo'q</h2><p>Avval guruh yarating yoki sizga guruh biriktirilsin.</p></div>{% else %}
+<div class="chips">{% for x in groups %}<a class="chip" href="?g={{ x.pk }}" aria-pressed="{% if x == g %}true{% else %}false{% endif %}">{{ x.name }}</a>{% endfor %}</div>
+<div class="cols">
+<section class="panel"><h2>{% if sel %}Natijalarni tahrirlash{% else %}Yangi imtihon{% endif %}: {{ g.name }}</h2>
+{% if studs %}<form method="post" class="stack" novalidate>{% csrf_token %}<input type="hidden" name="g" value="{{ g.pk }}">
+  <div class="frow"><div class="field"><label for="ex_t">Imtihon nomi *</label><input id="ex_t" name="title" required placeholder="Masalan: Oylik test, Unit 5" value="{{ sel.title|default:'' }}"></div></div>
+  <div class="frow"><div class="field"><label for="ex_d">Sana *</label><input id="ex_d" type="date" name="date" value="{% if sel %}{{ sel.date|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}"></div><div class="field"><label for="ex_m">Maksimal ball</label><input id="ex_m" type="number" min="1" name="max_score" value="{{ sel.max|default:100 }}" inputmode="numeric"></div></div>
+  <div class="scorelist">{% for r in studs %}<label class="scorerow"><span>{% avatar r.s.name %}{{ r.s.name }}</span><input type="number" min="0" name="s{{ r.s.pk }}" value="{{ r.v }}" inputmode="decimal" placeholder="ball" aria-label="{{ r.s.name }} balli"></label>{% endfor %}</div>
+  <small class="mut">Bo'sh qoldirilgan talaba uchun natija yozilmaydi.</small>
+  <div class="fbtns">{% if sel %}<a class="btn" href="?g={{ g.pk }}">Yangi imtihon</a>{% endif %}<button class="btn primary">Saqlash</button></div>
+</form>{% else %}<p class="mut m0">Guruhda faol talaba yo'q.</p>{% endif %}
+</section>
+<section class="panel"><h2>{% if sel %}Reyting: {{ sel.title }} <small class="mut">{{ sel.date|date:"d.m.Y" }} · o'rtacha {{ sel.avg }}%</small>{% else %}Guruh o'sishi{% endif %}</h2>
+{% if sel %}{{ rank_bars|json_script:"rank-data" }}<div data-src="rank-data" data-chart='{"type":"hbars","label":"Natija","unit":"%"}'></div>
+{% elif grow %}{{ grow|json_script:"grow-data" }}<div data-src="grow-data" data-chart='{"type":"columns","h":240,"unit":"%","max":100,"aria":"Imtihonlar bo&#39;yicha o&#39;rtacha natija","series":[{"key":"avg","label":"O&#39;rtacha","color":"var(--accent)"}]}'></div><small class="mut">Har bir imtihon bo'yicha guruhning o'rtacha natijasi (%)</small>
+{% else %}<p class="mut m0">Imtihon natijasi kiritilgach, reyting va o'sish grafigi shu yerda chiqadi.</p>{% endif %}
+</section>
+</div>
+<section class="panel"><h2>Imtihonlar tarixi</h2>{% if exams %}<div class="tblwrap"><table class="tbl"><thead><tr><th>Sana</th><th>Imtihon</th><th class="r">Qatnashdi</th><th>O'rtacha</th><th>Eng yaxshi</th><th></th></tr></thead><tbody>
+{% for e in exams %}<tr><td>{{ e.date|date:"d.m.Y" }}</td><td><b>{{ e.title }}</b></td><td class="r">{{ e.n }}</td><td style="min-width:120px"><div class="hbar {% if e.avg < 60 %}warn{% elif e.avg >= 85 %}good{% endif %}"><i style="width:{{ e.avg }}%"></i></div><small class="mut">{{ e.avg }}%</small></td><td>{{ e.best }} <small class="mut">{{ e.best_pct }}%</small></td><td class="r"><a class="btn sm ghost" href="?{{ e.q }}">Reyting</a></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="mut m0">Bu guruhda hali imtihon yo'q.</p>{% endif %}</section>
+{% endif %}
+{% endblock %}

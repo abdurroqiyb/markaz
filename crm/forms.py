@@ -186,7 +186,7 @@ class CenterForm(StyledModelForm):
 
     class Meta:
         model = Center
-        fields = ["name", "director", "phone", "address", "referral_bonus"]
+        fields = ["name", "director", "phone", "address", "referral_bonus", "public_form", "reminder_text"]
 
 
 class PlanForm(StyledModelForm):

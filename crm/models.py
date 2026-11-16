@@ -30,6 +30,12 @@ class Center(models.Model):
     referral_bonus = models.PositiveIntegerField("Do'st olib kelganlik bonusi (so'm)", default=0)
     plan_income = models.PositiveBigIntegerField("Tushum rejasi (so'm / oy)", default=0)
     plan_expense = models.PositiveBigIntegerField("Xarajat chegarasi (so'm / oy)", default=0)
+    public_form = models.BooleanField("Ochiq ariza formasi yoqilgan", default=True)
+    reminder_text = models.TextField(
+        "Qarz eslatmasi matni", blank=True,
+        default="Assalomu alaykum! {markaz} dan yozyapmiz. {ism} uchun {oy} oyi to'lovi {summa} so'm "
+                "hali to'lanmagan. Iltimos, to'lovni amalga oshiring. Savollar bo'lsa: {telefon}. Rahmat!",
+        help_text="O'zgaruvchilar: {ism} {summa} {oy} {guruh} {markaz} {telefon}")
 
     class Meta:
         verbose_name = "Markaz ma'lumotlari"
@@ -56,6 +62,8 @@ class Staff(models.Model):
     phone = models.CharField("Telefon", max_length=50, blank=True)
     # Bo'sh bo'lsa rol bo'yicha standart bo'limlar; aks holda faqat shu ro'yxatdagilar ochiq.
     sections = models.JSONField("Ochiq bo'limlar", default=list, blank=True)
+    totp_secret = models.CharField("2FA kaliti", max_length=64, blank=True, editable=False)
+    totp_enabled = models.BooleanField("Ikki bosqichli kirish yoqilgan", default=False)
 
     class Meta:
         verbose_name = "Xodim"
@@ -115,7 +123,7 @@ class Lead(TimeStamped):
         ("rad", "Rad etdi"),
     ]
     STATUS_CLS = {"yangi": "info", "aloqa": "warn", "sinov": "warn", "yozildi": "good", "rad": "mute"}
-    SOURCES = [(s, s) for s in ["Instagram", "Telegram", "Tanish-bilishlar", "Reklama", "Boshqa"]]
+    SOURCES = [(s, s) for s in ["Instagram", "Telegram", "Tanish-bilishlar", "Reklama", "Sayt (ariza)", "Boshqa"]]
     TRIAL_RESULTS = [
         ("", "Hali yo'q"),
         ("keldi", "Sinovga keldi, yoqdi"),
@@ -415,6 +423,7 @@ class Backup(models.Model):
     objects_count = models.PositiveIntegerField("Yozuvlar soni", default=0)
     summary = models.JSONField("Tarkibi", default=dict, blank=True)
     data = models.BinaryField("Ma'lumot", editable=False)
+    sent = models.CharField("Tashqariga yuborildi", max_length=200, blank=True)
 
     class Meta:
         verbose_name = "Zaxira nusxa"
@@ -423,3 +432,38 @@ class Backup(models.Model):
 
     def __str__(self):
         return f"Zaxira {self.created_at:%Y-%m-%d %H:%M}"
+
+
+# ---------------------------------------------------------------- xavfsizlik
+class LoginEvent(models.Model):
+    """Har bir kirish urinishi: muvaffaqiyatli, xato yoki bloklangan."""
+    KINDS = [("ok", "Kirdi"), ("fail", "Xato parol"), ("blocked", "Bloklangan"), ("2fa_fail", "Xato kod"),
+             ("logout", "Chiqdi")]
+    created_at = models.DateTimeField("Vaqt", auto_now_add=True, db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name="login_events", verbose_name="Foydalanuvchi")
+    username = models.CharField("Login", max_length=150, db_index=True)
+    ip = models.GenericIPAddressField("IP", null=True, blank=True, db_index=True)
+    agent = models.CharField("Qurilma", max_length=300, blank=True)
+    kind = models.CharField("Natija", max_length=10, choices=KINDS)
+
+    class Meta:
+        verbose_name = "Kirish urinishi"
+        verbose_name_plural = "Kirishlar tarixi"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.username} · {self.get_kind_display()} · {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def ok(self):
+        return self.kind == "ok"
+
+    @property
+    def device(self):
+        a = self.agent.lower()
+        os_ = ("Android" if "android" in a else "iPhone" if "iphone" in a else "iPad" if "ipad" in a else
+               "Windows" if "windows" in a else "Mac" if "mac os" in a else "Linux" if "linux" in a else "")
+        br = ("Edge" if "edg/" in a else "Opera" if "opr/" in a else "Chrome" if "chrome" in a else
+              "Firefox" if "firefox" in a else "Safari" if "safari" in a else "")
+        return " · ".join(x for x in (br, os_) if x) or (self.agent[:40] or "noma'lum")

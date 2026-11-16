@@ -16,7 +16,7 @@
   <div class="tile"><div class="lbl"><span class="ico">{% icon "users" %}</span>Guruhlarim</div><div class="num">{{ cab.rows|length }}</div><div class="hint">{{ cab.students }} ta faol talaba</div></div>
   <div class="tile"><div class="lbl"><span class="ico">{% icon "cal" %}</span>Shu oy darslar</div><div class="num">{{ cab.lessons }}</div><div class="hint">Davomat olingan darslar</div></div>
   <div class="tile"><div class="lbl"><span class="ico good">{% icon "check" %}</span>Davomat</div><div class="num">{% if cab.att is not None %}{{ cab.att }}%{% else %}-{% endif %}</div><div class="hint">{{ cab.now_label }}</div></div>
-  <div class="tile"><div class="lbl"><span class="ico good">{% icon "wallet" %}</span>Shu oy maosh</div><div class="num">{{ cab.sal|som }}<small>so'm</small></div><div class="hint">Taxminiy, to'lovlarga qarab o'zgaradi</div></div>
+  <div class="tile"><div class="lbl"><span class="ico good">{% icon "wallet" %}</span>Shu oy maosh</div><div class="num">{{ cab.sal|som }}<small>so'm</small></div><div class="hint">To'langan: {{ cab.paid|som }} · qoldi: {{ cab.rest|som }}</div></div>
 </div>
 {% if not cab.rows %}
 <div class="empty"><h2>Sizga hali guruh biriktirilmagan</h2><p>Direktor yoki administrator guruh sozlamasida "O'qituvchi hisobi" sifatida sizni tanlasa, guruhlaringiz shu yerda chiqadi.</p></div>

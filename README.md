@@ -39,7 +39,7 @@ python manage.py runserver
 ```
 
 Brauzerda http://127.0.0.1:8000 ni oching va yaratgan login/parolingiz bilan kiring.
-Admin panel: http://127.0.0.1:8000/admin/
+Admin panel: http://127.0.0.1:8000/boshqaruv-panel/ (`ADMIN_URL`)
 
 **SECRET_KEY**: `.env` da bo'lmasa, birinchi ishga tushishda avtomatik yaratilib `.env` fayliga yoziladi.
 `.env` git'ga qo'shilmaydi.
@@ -98,6 +98,28 @@ blokini va `SQLITE_PATH=/var/data/db.sqlite3` qatorini izohdan chiqaring.
 - Bazaning o'zi yo'qolsa ham qolishi uchun vaqti-vaqti bilan faylni kompyuterga yuklab oling.
   Excel eksport (**Asosiy → Excelga yuklab olish**) ham mavjud.
 
+## Xavfsizlik
+
+- **Login cheklovi**: bir login uchun 5 ta xato urinishdan keyin 15 daqiqa blok (bitta IP dan 20 ta xato bo'lsa IP ham bloklanadi).
+  Direktor **Xavfsizlik** bo'limida blokni darhol ochishi mumkin.
+- **Ikki bosqichli kirish (2FA)**: har bir xodim **Xavfsizlik** bo'limida Google/Microsoft Authenticator bilan yoqadi.
+  Telefonini yo'qotgan xodimning 2FA sini direktor xodim sahifasida o'chiradi.
+- **Kirishlar tarixi**: kim, qachon, qaysi qurilma/IP dan kirdi va xato urinishlar.
+- **Avtomatik chiqish**: 2 soat faolsizlikdan keyin (`SESSION_IDLE_MINUTES`).
+- **Admin panel** manzili `/admin/` emas, `ADMIN_URL` (standart `boshqaruv-panel/`); admin login ham 2FA va blokdan o'tadi.
+- **Sarlavhalar**: CSP, HSTS (1 yil), Permissions-Policy, autentifikatsiyalangan sahifalar keshlanmaydi.
+- **Zaxirani tashqariga yuborish**: Telegram (`BACKUP_TELEGRAM_BOT_TOKEN`, `BACKUP_TELEGRAM_CHAT_ID`) yoki
+  e-pochta (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `BACKUP_EMAIL_TO`).
+
+## Qo'shimcha imkoniyatlar
+
+- **Ochiq ariza formasi**: `/ariza/` (kirishsiz). Saytga/Instagram'ga qo'yiladi, ariza "Sayt (ariza)" manbali lid bo'ladi.
+  Markaz ma'lumotlarida yoqish/o'chirish mumkin. Spamdan himoya: yashirin maydon va IP bo'yicha cheklov.
+- **Qarz eslatmasi**: har qarzdor yonida "Eslatma" (nusxalash) va "TG" (Telegram orqali yuborish). Matn shabloni markaz ma'lumotlarida.
+- **Imtihonlar**: guruh bo'yicha ballarni bir yo'la kiritish, reyting va o'sish grafigi (o'qituvchi faqat o'z guruhlari).
+- **Oylik hisobot PDF**: Hisobotlar → "PDF / chop etish" (brauzerda "PDF sifatida saqlash").
+- **Haftalik kalendar**: Jadval → Kalendar. **Tungi rejim** tugmasi chap pastda. **PWA**: telefonda "Bosh ekranga qo'shish".
+
 ## Muhit o'zgaruvchilari
 
 | Nomi | Vazifasi |
@@ -111,6 +133,11 @@ blokini va `SQLITE_PATH=/var/data/db.sqlite3` qatorini izohdan chiqaring.
 | `TIME_ZONE` | Standart `Asia/Tashkent` |
 | `DJANGO_SUPERUSER_USERNAME` / `_PASSWORD` / `_EMAIL` | Deployda direktor hisobini yaratish |
 | `DJANGO_SUPERUSER_RESET_PASSWORD` | `true` bo'lsa mavjud direktor paroli yangilanadi |
+| `ADMIN_URL` | Admin panel manzili (standart `boshqaruv-panel`) |
+| `SESSION_IDLE_MINUTES` | Faolsizlikdan keyin chiqish, daqiqa (standart 120) |
+| `LOGIN_LOCK_FAILS` / `LOGIN_LOCK_MINUTES` / `LOGIN_IP_FAILS` | Login cheklovi (5 / 15 / 20) |
+| `BACKUP_TELEGRAM_BOT_TOKEN` / `BACKUP_TELEGRAM_CHAT_ID` | Kunlik zaxirani Telegramga yuborish |
+| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `BACKUP_EMAIL_TO` | Zaxirani e-pochtaga yuborish |
 
 ## Rollar
 

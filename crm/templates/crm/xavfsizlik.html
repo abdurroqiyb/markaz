@@ -1,0 +1,50 @@
+{% extends "crm/base.html" %}
+{% load crm_tags %}
+{% block title %}Xavfsizlik{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Xavfsizlik</h1><p class="sub">Parol, ikki bosqichli kirish va kirishlar tarixi</p></div><div class="tools"><a class="btn" href="{% url 'parol' %}">{% icon "key" %} Parolni almashtirish</a></div></div>
+{% if is_director and no2fa %}<div class="banner warning">Direktor hisoblarida ikki bosqichli kirish yoqilmagan: {% for x in no2fa %}<b>{{ x.get_full_name|default:x.username }}</b>{% if not forloop.last %}, {% endif %}{% endfor %}. Pul va xodimlar ma'lumoti uchun uni yoqish tavsiya etiladi.</div>{% endif %}
+<div class="cols">
+<section class="panel"><h2>Ikki bosqichli kirish (2FA)</h2>
+{% if staff.totp_enabled %}
+  <p><span class="pill good">Yoqilgan</span> Har kirishda parol va telefoningizdagi kod so'raladi.</p>
+  <form method="post" action="{% url 'twofa_disable' %}" class="stack" novalidate>{% csrf_token %}
+    <div class="field"><label for="dcode">O'chirish uchun joriy kod</label><input id="dcode" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" class="otp"></div>
+    <div class="fbtns"><button class="btn danger">2FA ni o'chirish</button></div>
+  </form>
+{% else %}
+  <ol class="steps">
+    <li>Telefoningizga <b>Google Authenticator</b> yoki <b>Microsoft Authenticator</b> ilovasini o'rnating.</li>
+    <li>Ilovada "+" ni bosib, quyidagi QR kodni skanerlang yoki kalitni qo'lda kiriting.</li>
+    <li>Ilova ko'rsatgan 6 xonali kodni pastga yozib, "Yoqish"ni bosing.</li>
+  </ol>
+  <div class="qrbox">{% if setup.qr %}<div class="qr">{{ setup.qr|safe }}</div>{% endif %}<div><small class="mut">Kalit (qo'lda kiritish uchun)</small><code class="secret" id="secret">{{ setup.secret }}</code><button type="button" class="btn sm ghost" data-copy="#secret">Nusxalash</button></div></div>
+  <form method="post" action="{% url 'twofa_enable' %}" class="stack" novalidate>{% csrf_token %}
+    <div class="field"><label for="ecode">Ilovadagi kod</label><input id="ecode" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" class="otp" required></div>
+    <div class="fbtns"><button class="btn primary">Yoqish</button></div>
+  </form>
+{% endif %}
+</section>
+<section class="panel"><h2>Himoya sozlamalari</h2>
+  <div class="mini"><span><b>Login cheklovi</b><br><small class="mut">{{ lock_fails }} marta xato kiritilsa, kirish {{ lock_minutes }} daqiqaga bloklanadi</small></span><span class="pill good">Faol</span></div>
+  <div class="mini"><span><b>Avtomatik chiqish</b><br><small class="mut">Tizim ishlatilmasa, ma'lum vaqtdan keyin o'zi chiqadi</small></span><span class="pill good">Faol</span></div>
+  <div class="mini"><span><b>Shifrlangan ulanish (HTTPS, HSTS)</b><br><small class="mut">Ma'lumotlar internetda shifrlangan holda yuboriladi</small></span><span class="pill good">Faol</span></div>
+  <div class="mini"><span><b>Kunlik zaxira</b><br><small class="mut">Har kuni avtomatik nusxa olinadi</small></span>{% if is_director %}<a class="btn sm" href="{% url 'zaxira' %}">Zaxira</a>{% else %}<span class="pill good">Faol</span>{% endif %}</div>
+</section>
+</div>
+<section class="panel"><h2>Mening oxirgi kirishlarim</h2>
+{% if mine %}<div class="tblwrap"><table class="tbl"><thead><tr><th>Vaqt</th><th>Natija</th><th>Qurilma</th><th>IP</th></tr></thead><tbody>
+{% for e in mine %}<tr><td>{{ e.created_at|date:"Y-m-d H:i" }}</td><td><span class="pill {% if e.kind == 'ok' %}good{% elif e.kind == 'logout' %}mute{% else %}bad{% endif %}">{{ e.get_kind_display }}</span></td><td>{{ e.device }}</td><td><small class="mut">{{ e.ip|default:"-" }}</small></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="mut m0">Hali yozuv yo'q.</p>{% endif %}
+<p class="mut m0" style="font-size:13px;margin-top:8px">Tanimagan kirishni ko'rsangiz, darhol parolingizni almashtiring.</p>
+</section>
+{% if is_director %}
+{% if locked %}<section class="panel"><h2>Hozir bloklangan loginlar</h2>{% for n in locked %}<div class="mini"><span><b>{{ n }}</b></span><form method="post" action="{% url 'unlock' %}" class="inl">{% csrf_token %}<input type="hidden" name="username" value="{{ n }}"><button class="btn sm">Blokdan chiqarish</button></form></div>{% endfor %}</section>{% endif %}
+<section class="panel"><h2>Barcha kirishlar tarixi</h2>
+  <div class="chips" style="margin-bottom:10px"><a class="chip" href="?" aria-pressed="{% if not flt %}true{% else %}false{% endif %}">Hammasi</a><a class="chip" href="?f=bad" aria-pressed="{% if flt == 'bad' %}true{% else %}false{% endif %}">Faqat xato va bloklar</a></div>
+  {% if all_events %}<div class="tblwrap"><table class="tbl"><thead><tr><th>Vaqt</th><th>Login</th><th>Natija</th><th>Qurilma</th><th>IP</th></tr></thead><tbody>
+  {% for e in all_events %}<tr><td>{{ e.created_at|date:"Y-m-d H:i" }}</td><td>{% if e.user %}{{ e.user.get_full_name|default:e.username }}{% else %}{{ e.username|default:"-" }}{% endif %}</td><td><span class="pill {% if e.kind == 'ok' %}good{% elif e.kind == 'logout' %}mute{% else %}bad{% endif %}">{{ e.get_kind_display }}</span></td><td>{{ e.device }}</td><td><small class="mut">{{ e.ip|default:"-" }}</small></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="mut m0">Yozuv yo'q.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

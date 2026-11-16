@@ -466,6 +466,30 @@ class Data:
                         "inc": inc, "exp": exp, "net": inc - exp})
         return out
 
+    def series6(self):
+        """Oxirgi 6 oy: reja (kutilgan) va yig'ilgan to'lov, davomat foizi."""
+        by_month = defaultdict(lambda: [0, 0])
+        for l in self.lessons:
+            for st in self.marks.get(l.id, {}).values():
+                c = by_month[mkey(l.date)]
+                c[1] += 1
+                c[0] += st == "keldi"
+        out = []
+        for n in range(-5, 1):
+            k = shift_month(self.NOW, n)
+            came, tot = by_month.get(k, (0, 0))
+            out.append({"k": k, "label": mlabel(k), "short": SHORT[int(k[5:]) - 1],
+                        "plan": self.expected_for(k), "got": self.income(k),
+                        "att": pct(came, tot) if tot else 0})
+        return out
+
+    def expense_cats(self, m):
+        tot = defaultdict(int)
+        for x in self.expenses:
+            if x.month == m:
+                tot[x.category] += x.amount
+        return [{"label": c, "v": v} for c, v in sorted(tot.items(), key=lambda kv: -kv[1]) if v]
+
     def month_series_students(self):
         return [sum(1 for s in self.students if s.join_date and mkey(s.join_date) == shift_month(self.NOW, n))
                 for n in range(-5, 1)]
@@ -584,13 +608,42 @@ def cabinet(d, groups):
                     if l.group_id in {g.id for g in groups} and mkey(l.date) == m)
     tot_came = sum(1 for l in d.lessons if l.group_id in {g.id for g in groups} and mkey(l.date) == m
                    for st in d.marks.get(l.id, {}).values() if st == "keldi")
-    return {
+    out = {
+        "paid": sum(x.amount for x in d.expenses if x.month == m and x.category in ("Maosh", "Avans")
+                    and x.teacher.strip().lower() in {g.teacher.strip().lower() for g in groups if g.teacher}),
         "rows": sorted(rows, key=lambda r: (not r["today"], (parse_time(r["g"].time) or (0,))[0])),
         "today_rows": [r for r in rows if r["today"]],
         "students": sum(r["n"] for r in rows), "sal": sum(r["sal"] for r in rows),
+        "rest": 0,
         "lessons": sum(r["lessons"] for r in rows),
         "att": pct(tot_came, tot_marks) if tot_marks else None,
         "att_p": tot_came / tot_marks if tot_marks else 0,
         "att_label": f"{pct(tot_came, tot_marks)}%" if tot_marks else "-",
         "six": six, "now_label": mlabel(m),
     }
+    out["rest"] = max(0, out["sal"] - out["paid"])
+    return out
+
+
+
+# ---------------------------------------------------------------- qarz eslatmasi
+class _Safe(dict):
+    def __missing__(self, k):
+        return "{" + k + "}"
+
+
+def reminder(center, s, g, debt, m):
+    """Markaz sozlamasidagi shablon bo'yicha bitta talabaga eslatma matni."""
+    tpl = center.reminder_text or ("Assalomu alaykum! {ism} uchun {oy} oyi to'lovi {summa} so'm hali to'lanmagan. "
+                                   "{markaz}, {telefon}")
+    return tpl.format_map(_Safe(ism=s.name, summa=fmt(debt), oy=mlabel(m), guruh=g.name if g else "",
+                                markaz=center.name or "", telefon=center.phone or "")).strip()
+
+
+def with_reminders(d, rows, m):
+    from urllib.parse import quote
+    for x in rows:
+        x["msg"] = reminder(d.center, x["s"], x.get("g") or d.group_of(x["s"]), x["debt"], m)
+        x["tg"] = "https://t.me/share/url?url=%20&text=" + quote(x["msg"])
+        x["to"] = x["s"].parent or x["s"].phone
+    return rows
