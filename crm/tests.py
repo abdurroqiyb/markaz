@@ -590,3 +590,15 @@ class NewFeaturesTest(Base):
         delete_demo()
         self.assertEqual(Student.objects.count(), real)
         self.assertFalse(User.objects.filter(username__startswith="demo.").exists())
+
+
+class DemoSpeedTest(Base):
+    def test_demo_uses_few_queries(self):
+        """Render + Neon da har bir so'rov ~0.1 s: namuna 60 soniyalik limitga sig'ishi uchun so'rovlar kam bo'lsin."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as c:
+            r = self.client.post(reverse("seed"))
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(Student.objects.filter(is_demo=True).count() > 50)
+        self.assertLess(len(c.captured_queries), 150)

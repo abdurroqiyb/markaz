@@ -1472,10 +1472,16 @@ def seed(request):
     if has_demo():
         messages.info(request, "Namuna allaqachon yuklangan")
     else:
-        create_demo()
+        try:
+            create_demo()
+        except Exception as e:  # sababini ko'rsatamiz, sahifa 500 bermasin
+            import logging
+            logging.getLogger(__name__).exception("Namuna yuklanmadi")
+            messages.error(request, f"Namuna yuklanmadi: {e.__class__.__name__}: {str(e)[:200]}")
+            return redirect("zaxira")
         log(request, "Namunaviy ma'lumot yuklandi")
-        messages.success(request, "Namunaviy ma'lumot qo'shildi: 6 oylik markaz. Demo loginlar Zaxira sahifasida.")
-    return redirect("dashboard")
+        messages.success(request, "Namunaviy ma'lumot qo'shildi: 6 oylik markaz. Demo loginlar pastda.")
+    return redirect(reverse("zaxira") + "#namuna")
 
 
 @director_required
